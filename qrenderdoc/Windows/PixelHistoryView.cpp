@@ -25,6 +25,8 @@
 #include "PixelHistoryView.h"
 #include <float.h>
 #include <math.h>
+
+#include <QAbstractItemModel>
 #include <QAction>
 #include <QMenu>
 #include "Code/Resources.h"

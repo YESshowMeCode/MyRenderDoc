@@ -462,6 +462,74 @@ protected:
 #if ENABLED(RDOC_DEVEL)
     real->GetDesc(&m_Desc);
 #endif
+    // // ++Dudechen
+    // D3D11_SHADER_RESOURCE_VIEW_DESC desc = GetDesc();
+    // const D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo = device->GetResource(0,1,&GetDesc());
+    // MemorySize = AllocationInfo.SizeInBytes;
+    // if(desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+    // {
+    //   ResourceType = FResourcesType::Buffer;
+    // }
+    // else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D)
+    // {
+    //   if(ShouldCountAsTextureMemory(desc.Flags))
+    //   {
+    //     if(desc.DepthOrArraySize > 1)
+    //       ResourceType = FResourcesType::Texture1DArray;
+    //     else
+    //       ResourceType = FResourcesType::Texture1D;
+    //   }
+    //   else
+    //   {
+    //     ResourceType = FResourcesType::RenterTarget1D;
+    //   }
+    //
+    //     //if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+    //     //    ResourceType = FResourcesType::RenterTarget1D;
+    //     //else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+    //     //    ResourceType = FResourcesType::RenterTarget1D;
+    // }
+    // else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+    // {
+    //   if(ShouldCountAsTextureMemory(desc.Flags))
+    //   {
+    //     if(desc.DepthOrArraySize > 1)
+    //       ResourceType = FResourcesType::Texture2DArray;
+    //     else
+    //       ResourceType = FResourcesType::Texture2D;
+    //   }
+    //   else
+    //   {
+    //     ResourceType = FResourcesType::RenterTarget2D;
+    //   }
+    //   
+    //   /*if(desc.DepthOrArraySize > 1)
+    //     ResourceType = FResourcesType::Texture2DArray;
+    //   else
+    //     ResourceType = FResourcesType::Texture2D;
+    //   if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+    //     ResourceType = FResourcesType::RenterTarget2D;
+    //   else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+    //     ResourceType = FResourcesType::RenterTarget2D;*/
+    // }
+    // else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D)
+    // {
+    //   if(ShouldCountAsTextureMemory(desc.Flags))
+    //   {
+    //       ResourceType = FResourcesType::Texture3D;
+    //   }
+    //   else
+    //   {
+    //     ResourceType = FResourcesType::RenterTarget3D;
+    //   }
+    //   //  ResourceType = FResourcesType::Texture2D;
+    //   //if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+    //   //  ResourceType = FResourcesType::RenterTarget3D;
+    //   //else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+    //   //  ResourceType = FResourcesType::RenterTarget3D;
+    // }
+    // RenderDoc::Inst().ResourceMemorySizeMap[(int)ResourceType][0] += MemorySize;
+    // // --Dudechen
   }
 
   virtual ~WrappedResource11() {}
@@ -499,6 +567,19 @@ public:
   {
     return m_pReal->GetEvictionPriority();
   }
+
+  // ++Dudechen
+  int64_t MemorySize = 0;
+  FResourcesType ResourceType = FResourcesType::None;
+  bool WrappedResource11::ShouldCountAsTextureMemory(int32_t MiscFlags)
+  {
+    // Shouldn't be used for DEPTH, RENDER TARGET, or UNORDERED ACCESS
+    return (0 == (MiscFlags & (D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL |
+                               D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                               D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)));
+  }
+
+  // --Dudechen
 
   //////////////////////////////
   // implement NestedType

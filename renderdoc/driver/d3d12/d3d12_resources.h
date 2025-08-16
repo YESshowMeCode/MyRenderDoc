@@ -1439,6 +1439,18 @@ public:
     TypeEnum = Resource_Resource,
   };
 
+  // ++Dudechen 
+  int64_t MemorySize = 0;
+  FResourcesType ResourceType = FResourcesType::None;
+  bool WrappedID3D12Resource::ShouldCountAsTextureMemory(int32_t MiscFlags)
+  {
+    // Shouldn't be used for DEPTH, RENDER TARGET, or UNORDERED ACCESS
+    return (0 == (MiscFlags & (D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL |
+                               D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                               D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)));
+  }
+
+  // --Dudechen
   WrappedID3D12Resource(ID3D12Resource *real, ID3D12Heap *heap, UINT64 HeapOffset,
                         WrappedID3D12Device *device, UINT64 origAddress = 0)
       : WrappedDeviceChild12(real, device)
@@ -1450,6 +1462,74 @@ public:
     m_Heap = (WrappedID3D12Heap *)heap;
     SAFE_ADDREF(m_Heap);
 
+    // ++Dudechen 
+    D3D12_RESOURCE_DESC desc = GetDesc();
+    const D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo = device->GetResourceAllocationInfo(0,1,&GetDesc());
+    MemorySize = AllocationInfo.SizeInBytes;
+    if(desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+    {
+      ResourceType = FResourcesType::Buffer;
+    }
+    else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D)
+    {
+      if(ShouldCountAsTextureMemory(desc.Flags))
+      {
+        if(desc.DepthOrArraySize > 1)
+          ResourceType = FResourcesType::Texture1DArray;
+        else
+          ResourceType = FResourcesType::Texture1D;
+      }
+      else
+      {
+        ResourceType = FResourcesType::RenterTarget1D;
+      }
+
+        //if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+        //    ResourceType = FResourcesType::RenterTarget1D;
+        //else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+        //    ResourceType = FResourcesType::RenterTarget1D;
+    }
+    else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+    {
+      if(ShouldCountAsTextureMemory(desc.Flags))
+      {
+        if(desc.DepthOrArraySize > 1)
+          ResourceType = FResourcesType::Texture2DArray;
+        else
+          ResourceType = FResourcesType::Texture2D;
+      }
+      else
+      {
+        ResourceType = FResourcesType::RenterTarget2D;
+      }
+      
+      /*if(desc.DepthOrArraySize > 1)
+        ResourceType = FResourcesType::Texture2DArray;
+      else
+        ResourceType = FResourcesType::Texture2D;
+      if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+        ResourceType = FResourcesType::RenterTarget2D;
+      else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+        ResourceType = FResourcesType::RenterTarget2D;*/
+    }
+    else if(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D)
+    {
+      if(ShouldCountAsTextureMemory(desc.Flags))
+      {
+          ResourceType = FResourcesType::Texture3D;
+      }
+      else
+      {
+        ResourceType = FResourcesType::RenterTarget3D;
+      }
+      //  ResourceType = FResourcesType::Texture2D;
+      //if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+      //  ResourceType = FResourcesType::RenterTarget3D;
+      //else if(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+      //  ResourceType = FResourcesType::RenterTarget3D;
+    }
+    RenderDoc::Inst().ResourceMemorySizeMap[(int)ResourceType][0] += MemorySize;
+    // --Dudechen
     // assuming only valid for buffers
     if(m_pReal->GetDesc().Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
     {

@@ -150,6 +150,10 @@ public:
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
 
+  // ++Dudechen
+  uint32_t StatTriangleNum(uint32_t StartId, uint32_t EndId);
+  // --Dudechen
+
 private slots:
   // automatic slots
   void on_find_toggled(bool checked);
@@ -171,6 +175,14 @@ private slots:
   void on_exportActions_clicked();
   void on_colSelect_clicked();
 
+  // ++Dudechen
+  void on_SortTriangle_clicked(QModelIndex selectedIndex);
+  void on_SortDuration_clicked(QModelIndex selectedIndex);
+  void on_UnSort_clicked(QModelIndex selectedIndex);
+  void on_ExportEvents_Clicked();
+  void recordActionInfo(const ActionDescription& action, QTextStream& stream);
+  // --Dudechen
+
   // manual slots
   void findHighlight_timeout();
   void explanation_currentItemChanged(RDTreeWidgetItem *current, RDTreeWidgetItem *prev);
@@ -187,7 +199,10 @@ private slots:
   void location_leave();
   void location_keyPress(QKeyEvent *e);
 
-private:
+  // ++Dudechen
+  //private:
+public:
+  // --Dudechen
   void ExpandNode(QModelIndex idx);
 
   bool SelectEvent(uint32_t eventId);
@@ -261,6 +276,12 @@ private:
   QCompleter *m_SavedCompleter;
   QStringListModel *m_SavedCompletionModel;
   RDTextEdit *m_CurrentFilterText;
+
+  // ++Dudechen
+  // rdcarray<ActionDescription> m_SaveActionDescriptions;
+  bool m_bIsTriangleSorted = false;
+  bool m_bIsDurationSorted = false;
+  // --Dudechen
 
   void RefreshShaderMessages();
   Ui::EventBrowser *ui;

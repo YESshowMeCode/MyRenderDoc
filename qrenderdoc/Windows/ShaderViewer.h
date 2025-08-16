@@ -30,6 +30,10 @@
 #include <QStyledItemDelegate>
 #include "Code/Interface/QRDInterface.h"
 
+//++[Dudechen]
+#include "Code/DecompileShaderStage.h"
+//--[Dudechen]
+
 namespace Ui
 {
 class ShaderViewer;
@@ -142,6 +146,24 @@ public:
     return ret;
   }
 
+  //++[Dudechen]
+  static ShaderViewer *DecompileShader(ICaptureContext &ctx, ResourceId id, ShaderStage stage,
+                                  const QString &entryPoint, const rdcstrpairs &files,
+                                  ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
+                                  const ShaderReflection *shader,
+                                  IShaderViewer::SaveCallback saveCallback,
+                                  IShaderViewer::RevertCallback closeCallback,
+                                  ModifyCallback modifyCallback, QWidget *parent)
+  {
+    ShaderViewer *ret = new ShaderViewer(ctx, parent);
+    ret->m_SaveCallback = saveCallback;
+    ret->m_RevertCallback = closeCallback;
+    ret->m_ModifyCallback = modifyCallback;
+    ret->decompileShader(id, stage, entryPoint, files, shaderEncoding, flags, shader);
+    return ret;
+  }
+  //--[Dudechen]
+
   static IShaderViewer *DebugShader(ICaptureContext &ctx, const ShaderReflection *shader,
                                     ResourceId pipeline, ShaderDebugTrace *trace,
                                     const QString &debugContext, QWidget *parent)
@@ -190,6 +212,16 @@ private slots:
   void on_floatView_clicked();
   void on_debugToggle_clicked();
 
+  //++[Dudechen]
+  void on_resHLSLBtn_clicked();
+  void on_dxbcSrcResToggle_clicked();
+  void on_decompileShaderHlslDxbcToggle_clicked();
+  void on_openFloderBtn_clicked();
+  void on_decompileShaderToggle_clicked();
+  void on_dxbcDecompileSourceToggle_clicked();
+  void on_refresh_decompiled_shader_clicked();
+  //--[Dudechen]
+  
   void on_resources_sortByStep_clicked();
   void on_resources_sortByResource_clicked();
 
@@ -225,6 +257,13 @@ private:
   void debugShader(const ShaderReflection *shader, ResourceId pipeline, ShaderDebugTrace *trace,
                    const QString &debugContext);
 
+  //++[Dudechen] 
+  void closeDecompileShaderUI();
+  void decompileShader(ResourceId id, ShaderStage stage, const QString &entryPoint,
+                       const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                       ShaderCompileFlags flags, const ShaderReflection *shader);
+  //--[Dudechen]
+
   bool eventFilter(QObject *watched, QEvent *event) override;
 
   QAction *MakeExecuteAction(QString name, const QIcon &icon, QString tooltip, QKeySequence shortcut);
@@ -253,6 +292,20 @@ private:
   bool isSourceDebugging();
 
   void cacheResources();
+
+  //++[Dudechen]
+
+  void gotoEditorPage(DecompileShaderTemporalFileType type);
+  DecompileShaderTemporalFileType getCurrentEditorFileType();
+  void saveDecompilingTemoporalShader();
+  void saveTempShaderFile(const rdcstr &filePath, const QByteArray &code);
+  void saveTempShaderFile(const rdcstr &filePath, const char *code,
+                                        const qint64 codeLen);
+  void refreshShaderEditor();
+  void disassemblySourceDxbc();
+  void disassemblyCurrentPipelineDxbc(const QString &readableFilePath, const ShaderReflection &shaderReflection);
+  QString formatShaderStage(ShaderStage stage);
+  //--[Dudechen]
 
   ShaderEncoding currentEncoding();
 
@@ -301,6 +354,14 @@ private:
 
   FindReplace *m_FindReplace;
 
+  //++[Dudechen] 
+  QMap<DecompileShaderTemporalFileType, ScintillaEdit *> m_decompileTemporalFileEditorMap;
+  QMap<ScintillaEdit *, QWidget *> m_decompileEditorWidgetMap;
+  QMap<DecompileShaderTemporalFileType, QString> m_decompileTemporalTypeFilePathMap;
+  QString _decompileTemporalPath;
+  ScintillaEdit * _currentEditor;
+  //--[Dudechen]
+  
   struct FindState
   {
     // hash identifies when the search has changed

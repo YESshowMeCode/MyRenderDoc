@@ -4073,6 +4073,498 @@ void BufferViewer::setPersistData(const QVariant &persistData)
   }
 }
 
+void BufferViewer::ExportData(const QString &InFilePath, const BufferExport &params,
+    const MeshDataStage &InType)
+{
+  if (!m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction() || !m_CurView || InFilePath.isEmpty())
+    {
+      return;
+    }
+    QString OutPath = InFilePath;
+    BufferItemModel *model = nullptr;
+    switch(InType)
+    {
+      case MeshDataStage::VSIn: 
+      {
+        model = (BufferItemModel *)tableForStage(MeshDataStage::VSIn)->model();
+        if(params.format == BufferExport::CSV)
+        {
+          OutPath += tr("_VSIn.csv");
+        }
+        else
+        {
+          OutPath += tr("_VSIn.bin");
+        }
+        break;
+      }
+      case MeshDataStage::VSOut: 
+      {
+        model = (BufferItemModel *)tableForStage(MeshDataStage::VSOut)->model();
+        if(params.format == BufferExport::CSV)
+        {
+          OutPath += tr("_VSOut.csv");
+        }
+        else
+        {
+          OutPath += tr("_VSOut.bin");
+        }
+        break;
+      }
+      default: break;
+    }
+    if(!model)
+    {
+        return;
+    }
+    QFile *f = new QFile(OutPath);
+    QIODevice::OpenMode flags = QIODevice::WriteOnly | QFile::Truncate;
+    if(params.format == BufferExport::CSV)
+      flags |= QIODevice::Text;
+    if(!f->open(flags))
+    {
+      delete f;
+      RDDialog::critical(this, tr("Error exporting file"),
+                         tr("Couldn't open file '%1' for writing").arg(OutPath));
+      return;
+    }
+
+    if(params.format == BufferExport::RawBytes)
+    {
+      const BufferConfiguration &config = model->getConfig();
+
+      if(!m_MeshView)
+      {
+        // this is the simplest possible case, we just dump the contents of the first buffer.
+        if(!m_IsBuffer || config.buffers[0]->size() >= m_ByteSize)
+        {
+          f->write((const char *)config.buffers[0]->data(), int(config.buffers[0]->size()));
+        }
+        else
+        {
+          // For buffers we have to handle reading in pages though as we might not have
+          // everything in memory.
+          ResourceId buff = m_BufferID;
+
+          static const uint64_t maxChunkSize = 4 * 1024 * 1024;
+          for(uint64_t byteOffset = m_ByteOffset; byteOffset < m_ByteSize; byteOffset += maxChunkSize)
+          {
+            uint64_t chunkSize = qMin(m_ByteSize - byteOffset, maxChunkSize);
+
+            // it's fine to block invoke, because this is on the export thread
+            m_Ctx.Replay().BlockInvoke([buff, f, byteOffset, chunkSize](IReplayController *r) {
+              bytebuf chunk = r->GetBufferData(buff, byteOffset, chunkSize);
+              f->write((const char *)chunk.data(), (qint64)chunk.size());
+            });
+          }
+        }
+      }
+      else
+      {
+        // cache column data for the inner loop
+        QVector<CachedElData> cache;
+
+        CacheDataForIteration(cache, config.columns, config.props, config.buffers,
+                              config.curInstance);
+
+        // go row by row, finding the start of the row and dumping out the elements
+        // using their offset and sizes
+        for(int i = 0; i < model->rowCount(); i++)
+        {
+          // manually calculate the index so that we get the real offset (not the
+          // displayed offset) in the case of vertex output.
+          uint32_t idx = i;
+
+          if(config.indices && config.indices->hasData())
+          {
+            idx = CalcIndex(config.indices, i, config.baseVertex, config.primRestart);
+
+            // completely omit primitive restart indices
+            if(config.primRestart && idx == config.primRestart)
+              continue;
+          }
+
+          for(int col = 0; col < cache.count(); col++)
+          {
+            const CachedElData &d = cache[col];
+            const ShaderConstant *el = d.el;
+            const BufferElementProperties *prop = d.prop;
+
+            if(d.data)
+            {
+              const char *bytes = (const char *)d.data;
+
+              if(!prop->perinstance)
+                bytes += d.stride * idx;
+
+              if(bytes + d.byteSize <= (const char *)d.end)
+              {
+                f->write(bytes, d.byteSize);
+                continue;
+              }
+            }
+
+            // if we didn't continue above, something was wrong, so write nulls
+            f->write(d.nulls);
+          }
+        }
+      }
+    }
+    else if(params.format == BufferExport::CSV)
+    {
+      // otherwise we need to iterate over all the data ourselves
+      const BufferConfiguration &config = model->getConfig();
+      QTextStream s(f);
+
+      for(int i = 0; i < model->columnCount(); i++)
+      {
+        s << model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+
+        if(i + 1 < model->columnCount())
+          s << ", ";
+      }
+
+      s << "\n";
+
+      if(m_MeshView || !m_IsBuffer || config.buffers[0]->size() >= m_ByteSize)
+      {
+        // if there's no pagination to worry about, dump using the model's data()
+        for(int row = 0; row < model->rowCount(); row++)
+        {
+          for(int col = 0; col < model->columnCount(); col++)
+          {
+            s << model->data(model->index(row, col), Qt::DisplayRole).toString();
+
+            if(col + 1 < model->columnCount())
+              s << ", ";
+          }
+
+          s << "\n";
+        }
+      }
+      else
+      {
+        // write 64k rows at a time
+        ResourceId buff = m_BufferID;
+        const uint64_t maxChunkSize = 64 * 1024 * config.buffers[0]->stride;
+        for(uint64_t byteOffset = m_ByteOffset; byteOffset < m_ByteSize; byteOffset += maxChunkSize)
+        {
+          uint64_t chunkSize = qMin(m_ByteSize - byteOffset, maxChunkSize);
+
+          // it's fine to block invoke, because this is on the export thread
+          m_Ctx.Replay().BlockInvoke([buff, &s, &config, byteOffset, chunkSize](IReplayController *r) {
+            // cache column data for the inner loop
+            QVector<CachedElData> cache;
+
+            BufferData bufferData;
+
+            bufferData.storage = r->GetBufferData(buff, byteOffset, chunkSize);
+            bufferData.stride = config.buffers[0]->stride;
+
+            size_t numRows = (bufferData.storage.size() + bufferData.stride - 1) / bufferData.stride;
+            size_t rowOffset = byteOffset / bufferData.stride;
+
+            CacheDataForIteration(cache, config.columns, config.props, {&bufferData}, 0);
+
+            // go row by row, finding the start of the row and dumping out the elements
+            // using their offset and sizes
+            for(size_t idx = 0; idx < numRows; idx++)
+            {
+              s << (rowOffset + idx) << ", ";
+
+              for(int col = 0; col < cache.count(); col++)
+              {
+                const CachedElData &d = cache[col];
+                const ShaderConstant *el = d.el;
+                const BufferElementProperties *prop = d.prop;
+
+                if(d.data)
+                {
+                  const byte *data = d.data;
+                  const byte *end = d.end;
+
+                  data += d.stride * idx;
+
+                  // only slightly wasteful, we need to fetch all variants together
+                  // since some formats are packed and can't be read individually
+                  QVariantList list = GetVariants(prop->format, *el, data, end);
+
+                  for(int v = 0; v < list.count(); v++)
+                  {
+                    s << interpretVariant(list[v], *el, *prop);
+
+                    if(v + 1 < list.count())
+                      s << ", ";
+                  }
+
+                  if(list.empty())
+                  {
+                    for(int v = 0; v < d.numColumns; v++)
+                    {
+                      s << "---";
+
+                      if(v + 1 < d.numColumns)
+                        s << ", ";
+                    }
+                  }
+
+                  if(col + 1 < cache.count())
+                    s << ", ";
+                }
+              }
+
+              s << "\n";
+            }
+          });
+        }
+      }
+    }
+    f->close();
+    delete f;
+}
+
+void BufferViewer::GenGeometry(CSVGeometry &OutputData, uint64_t ShaderId, QMap<int, QString> meshSetting, int exportType, FbxMatrix inverseMat)
+{
+  if (!m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction() || !m_CurView)
+    {
+      return;
+    }
+  BufferItemModel *model;
+  if(exportType == ExportMeshType::VS_In)
+  {
+    model = (BufferItemModel *)tableForStage(MeshDataStage::VSIn)->model();
+  }
+  else if(exportType == ExportMeshType::VS_Out)
+  {
+    model = (BufferItemModel *)tableForStage(MeshDataStage::VSOut)->model();
+  }
+  else if(exportType == ExportMeshType::DS)
+  {
+    model = (BufferItemModel *)tableForStage(MeshDataStage::GSOut)->model();
+  }
+  if(!model)
+  {
+      return;
+  }
+
+  QMap<QString, int> headerIndexMap;
+  for(int i = 2; i < model->columnCount(); i++)
+  {
+
+    QString str = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+    QStringList result = str.split(tr("."));
+    if(result.count() == 2)
+    {
+      str = result.first();
+    }
+    if(!headerIndexMap.contains(str))
+    {
+      headerIndexMap.insert(str, i);
+    }
+  }
+  QMap<int, int> typeMap;
+  for(QMap<int, QString>::iterator it = meshSetting.begin(); it != meshSetting.end(); it++)
+  {
+    if(headerIndexMap.contains(it.value()))
+    {
+      typeMap.insert(it.key(),headerIndexMap[it.value()]);
+    }
+  }
+
+  
+  // otherwise we need to iterate over all the data ourselves
+  const BufferConfiguration &config = model->getConfig();
+
+  if(m_MeshView || !m_IsBuffer || config.buffers[0]->size() >= m_ByteSize)
+  {
+    // if there's no pagination to worry about, dump using the model's data()
+    for(int row = 0; row < model->rowCount(); row++)
+    {
+      uint index = model->data(model->index(row, 1), Qt::DisplayRole).toUInt();
+      OutputData.indexs.push_back(index);
+      
+      for(QMap<int, int>::iterator it = typeMap.begin(); it != typeMap.end(); it++)
+      {
+        MeshDataLayer layer = (MeshDataLayer)it.key();
+        int startIndex = it.value();
+        if(layer == MeshDataLayer::VERTICE)
+        {
+          FbxVector4 vertex = FbxVector4(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 2), Qt::DisplayRole).toDouble());
+          if(exportType != ExportMeshType::VS_In)
+          {
+            vertex = inverseMat.MultNormalize(vertex);
+          }
+          OutputData.vertices.push_back(vertex);
+        }
+        else if(layer == MeshDataLayer::NORMAL)
+        {
+          FbxVector4 normal = FbxVector4(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 2), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 3), Qt::DisplayRole).toDouble());
+
+          OutputData.normals.push_back(normal);
+        }
+        else if(layer == MeshDataLayer::UV)
+        {
+          FbxVector2 uv = FbxVector2(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble());
+          OutputData.texCoords.push_back(uv);
+        }
+        else if(layer == MeshDataLayer::UV1)
+        {
+          FbxVector2 uv1 = FbxVector2(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble());
+          OutputData.texCoords1.push_back(uv1);
+        }
+        else if(layer == MeshDataLayer::UV2)
+        {
+          FbxVector2 uv2 = FbxVector2(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble());
+          OutputData.texCoords2.push_back(uv2);
+        }
+        else if(layer == MeshDataLayer::UV3)
+        {
+          FbxVector2 uv3 = FbxVector2(model->data(model->index(row, startIndex), Qt::DisplayRole).toDouble(),
+              model->data(model->index(row, startIndex + 1), Qt::DisplayRole).toDouble());
+          OutputData.texCoords3.push_back(uv3);
+        }
+      }
+
+  //     FbxVector4 vertex = FbxVector4(model->data(model->index(row, 2), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 3), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 4), Qt::DisplayRole).toDouble());
+  //
+  //     FbxVector4 normal = FbxVector4(model->data(model->index(row, 9), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 10), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 11), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 12), Qt::DisplayRole).toDouble());
+  //
+  //     FbxVector2 uv = FbxVector2(model->data(model->index(row, 21), Qt::DisplayRole).toDouble(),
+  //       model->data(model->index(row, 22), Qt::DisplayRole).toDouble());
+  //     FbxVector2 uv1 = FbxVector2(model->data(model->index(row, 23), Qt::DisplayRole).toDouble(),
+  // model->data(model->index(row, 24), Qt::DisplayRole).toDouble());
+      
+
+      if(row % 3 == 0)
+      {
+        OutputData.shaderResIds.push_back(ShaderId);
+      }
+      // if(model->columnCount() > 20)
+      // {
+      //   FbxVector4 BoneIndex = FbxVector4(model->data(model->index(row, 13), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 14), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 15), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 16), Qt::DisplayRole).toDouble());
+      //   
+      //   FbxVector4 weight = FbxVector4(model->data(model->index(row, 17), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 18), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 19), Qt::DisplayRole).toDouble(),
+      //     model->data(model->index(row, 20), Qt::DisplayRole).toDouble());
+      //   OutputData.indexs.push_back(index);
+      //   OutputData.BoneIndexs.push_back(BoneIndex);
+      //   OutputData.skinWeights.push_back(weight);
+      //
+      // }
+    }
+  }
+}
+
+QStringList BufferViewer::GetVSInMeshHeadData()
+{
+  QStringList headerList;
+  headerList << tr("NULL");
+  if (!m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction() || !m_CurView)
+  {
+    return headerList;
+  }
+  BufferItemModel *model = (BufferItemModel *)tableForStage(MeshDataStage::VSIn)->model();
+  if(!model)
+  {
+    return  headerList;
+  }
+
+  for(int i = 2; i < model->columnCount(); i++)
+  {
+    QString str = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+    QStringList result = str.split(tr("."));
+    if(result.count() == 2)
+    {
+      str = result.first();
+    }
+    if(!headerList.contains(str))
+    {
+      headerList << str;
+    }
+  }
+
+  return headerList;
+}
+
+QStringList BufferViewer::GetVSOutMeshHeadData()
+{
+  QStringList headerList;
+  headerList << tr("NULL");
+  if (!m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction() || !m_CurView)
+  {
+    return headerList;
+  }
+  BufferItemModel *model = (BufferItemModel *)tableForStage(MeshDataStage::VSOut)->model();
+  if(!model)
+  {
+    return  headerList;
+  }
+
+  for(int i = 2; i < model->columnCount(); i++)
+  {
+    QString str = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+    QStringList result = str.split(tr("."));
+    if(result.count() == 2)
+    {
+      str = result.first();
+    }
+    if(!headerList.contains(str))
+    {
+      headerList << str;
+    }
+  }
+
+  return headerList;
+}
+
+QStringList BufferViewer::GetDSMeshHeadData()
+{
+  QStringList headerList;
+  headerList << tr("NULL");
+  if (!m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction() || !m_CurView)
+  {
+    return headerList;
+  }
+  BufferItemModel *model = (BufferItemModel *)tableForStage(MeshDataStage::GSOut)->model();
+  if(!model)
+  {
+    return  headerList;
+  }
+
+  for(int i = 2; i < model->columnCount(); i++)
+  {
+    QString str = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+    QStringList result = str.split(tr("."));
+    if(result.count() == 2)
+    {
+      str = result.first();
+    }
+    if(!headerList.contains(str))
+    {
+      headerList << str;
+    }
+  }
+
+  return headerList;
+}
+
+
 void BufferViewer::UI_FixedAddMatrixRows(RDTreeWidgetItem *n, const ShaderConstant &c,
                                          const ShaderVariable &v)
 {

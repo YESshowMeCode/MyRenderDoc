@@ -320,29 +320,6 @@
      </widget>
     </item>
     <item>
-     <widget class="QToolButton" name="bookmark">
-      <property name="toolTip">
-       <string>Add, remove or jump to bookmarks in current file</string>
-      </property>
-      <property name="text">
-       <string>Bookmark...</string>
-      </property>
-      <property name="icon">
-       <iconset resource="../Resources/resources.qrc">
-        <normaloff>:/bookmark_blue.png</normaloff>:/bookmark_blue.png</iconset>
-      </property>
-      <property name="popupMode">
-       <enum>QToolButton::InstantPopup</enum>
-      </property>
-      <property name="toolButtonStyle">
-       <enum>Qt::ToolButtonTextBesideIcon</enum>
-      </property>
-      <property name="autoRaise">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
      <widget class="Line" name="line">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
@@ -496,6 +473,151 @@
      </widget>
     </item>
     <item>
+     <widget class="QToolButton" name="stepBack">
+      <property name="toolTip">
+       <string>Step Back (Shift-F10)</string>
+      </property>
+      <property name="text">
+       <string>Step Back</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_reverse_blue.png</normaloff>:/control_reverse_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="stepNext">
+      <property name="toolTip">
+       <string>Step Next (F10)</string>
+      </property>
+      <property name="text">
+       <string>Step Next</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_play_blue.png</normaloff>:/control_play_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="debugSep">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="run">
+      <property name="toolTip">
+       <string>Run forwards (F5)</string>
+      </property>
+      <property name="text">
+       <string>Run forwards</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_end_blue.png</normaloff>:/control_end_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="runToCursor">
+      <property name="minimumSize">
+       <size>
+        <width>23</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="toolTip">
+       <string>Run to Cursor (Ctrl-F10)</string>
+      </property>
+      <property name="text">
+       <string>Run to Cursor</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_cursor_blue.png</normaloff>:/control_cursor_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="runToSample">
+      <property name="minimumSize">
+       <size>
+        <width>23</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="toolTip">
+       <string>Run to Sample/Load/Gather</string>
+      </property>
+      <property name="text">
+       <string>Run to Sample</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_sample_blue.png</normaloff>:/control_sample_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="runToNaNOrInf">
+      <property name="minimumSize">
+       <size>
+        <width>23</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="toolTip">
+       <string>Run to NaN or Inf</string>
+      </property>
+      <property name="text">
+       <string>Run to NaN/Inf</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/control_nan_blue.png</normaloff>:/control_nan_blue.png</iconset>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="Line" name="regFormatSep">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
@@ -553,7 +675,115 @@
        <string>Change the debugging view</string>
       </property>
       <property name="text">
-       <string notr="true">Debug Toggle</string>
+       <string notr="true">ResHLSL</string>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="Line" name="decompileShaderSep">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="resHLSLBtn">
+         <property name="minimumSize">
+          <size>
+           <width>23</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Change the debugging view</string>
+         </property>
+         <property name="text">
+          <string notr="true">ResHLSL</string>
+         </property>
+         <property name="checkable">
+          <bool>false</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="dxbcSrcResToggle">
+         <property name="minimumSize">
+          <size>
+           <width>23</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Change the debugging view</string>
+         </property>
+         <property name="text">
+          <string notr="true">DXBC(Res)</string>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="decompileShaderHlslDxbcToggle">
+         <property name="minimumSize">
+          <size>
+           <width>23</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Change the debugging view</string>
+         </property>
+         <property name="text">
+          <string notr="true">Final Decompiled(HLSL)</string>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="dxbcDecompileSourceToggle">
+         <property name="minimumSize">
+          <size>
+           <width>23</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Change the debugging view</string>
+         </property>
+         <property name="text">
+          <string notr="true">DXBC(Source)</string>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="openFloderBtn">
+         <property name="minimumSize">
+          <size>
+           <width>23</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Change the debugging view</string>
+         </property>
+         <property name="text">
+          <string notr="true">Open Shader Folder</string>
       </property>
       <property name="autoRaise">
        <bool>true</bool>
@@ -707,6 +937,29 @@
       </property>
      </widget>
     </item>
+    <item row="1" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Compiler:</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <spacer name="verticalSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
     <item row="0" column="3">
      <widget class="QComboBox" name="encoding">
       <property name="minimumSize">
@@ -723,23 +976,23 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="4">
-     <spacer name="horizontalSpacer_2">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
+    <item row="3" column="1">
+     <widget class="QToolButton" name="decompileBtn">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
       </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>40</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
-    </item>
-    <item row="1" column="0">
-     <widget class="QLabel" name="label_3">
       <property name="text">
-       <string>Compiler:</string>
+       <string>Decompile Shader</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Entry Point:</string>
       </property>
       <property name="alignment">
        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -768,7 +1021,7 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="2" rowspan="2" colspan="3">
+    <item row="1" column="2" rowspan="4" colspan="3">
      <widget class="QTextEdit" name="toolCommandLine">
       <property name="minimumSize">
        <size>
@@ -782,22 +1035,56 @@
      </widget>
     </item>
     <item row="2" column="1">
-     <spacer name="verticalSpacer">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
+     <widget class="QComboBox" name="decompileStartStageComboBox">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
        <size>
         <width>20</width>
         <height>40</height>
        </size>
       </property>
-     </spacer>
+     <property name="insertPolicy">
+            <enum>QComboBox::NoInsert</enum>
+           </property>
+           <property name="sizeAdjustPolicy">
+            <enum>QComboBox::AdjustToContents</enum>
+           </property>
+           <item>
+            <property name="text">
+             <string>ResourceDXBC</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>GLSL</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="decompileStartFromLabel">
+           <property name="text">
+            <string>Decompile Start From</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
     </item>
    </layout>
   </widget>
  </widget>
  <customwidgets>
+ <customwidget>
+    <class>RDTableWidget</class>
+    <extends>QTableWidget</extends>
+    <header>Widgets/Extended/RDTableWidget.h</header>
+   </customwidget>
   <customwidget>
    <class>RDTreeWidget</class>
    <extends>QTreeView</extends>

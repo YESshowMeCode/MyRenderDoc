@@ -157,7 +157,15 @@ private:
     bool suppress = false;
 
     suppress = (Flags & D3D11_CREATE_DEVICE_PREVENT_ALTERING_LAYER_SETTINGS_FROM_REGISTRY) != 0;
-
+    
+    // ++Dudechen
+    // if(suppress)
+    // {
+    //   RDCLOG("Application requested not to be hooked.");
+    // }
+    // else if(SUCCEEDED(ret) && ppDevice)
+    // --Dudechen
+    
     if(suppress)
     {
       RDCLOG("Application requested not to be hooked.");

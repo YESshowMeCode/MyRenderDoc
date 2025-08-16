@@ -52,8 +52,14 @@
 #include "Windows/Dialogs/SuggestRemoteDialog.h"
 #include "Windows/Dialogs/TipsDialog.h"
 #include "Windows/Dialogs/UpdateDialog.h"
+
+#include "EventBrowser.h"
+#include "TextureViewer.h"
 #include "ui_MainWindow.h"
 #include "version.h"
+
+#include "Dialogs/GlobalHook.h"
+#include "Dialogs/StatisticsTrianglesDialog.h"
 
 #define JSON_ID "rdocLayoutData"
 #define JSON_VER 1
@@ -108,6 +114,500 @@ void MainWindow::MakeNetworkRequest(QUrl url, std::function<void(QByteArray)> su
   // fire over onto the network thread
   emit networkRequestGet(url);
 }
+
+void MainWindow::OpenGlobalHookWindow()
+{
+  GlobalHook saveDialog;
+  int res = RDDialog::show(&saveDialog);
+}
+
+void MainWindow::OpenStatTrianglesDialog()
+{
+  StatisticsTrianglesDialog saveDialog(this);
+  int res = RDDialog::show(&saveDialog);
+}
+
+// ++Dudechen
+void MainWindow::ExportAllCSV()
+{
+  if(!m_Ctx.IsCaptureLoaded())
+  {
+    QMessageBox::warning(this, tr("warning"), tr("当前未打开任何RDC"));
+    return;
+  }
+  
+  QString SaveDir = QFileDialog::getExistingDirectory(this, tr("选择保存位置"));
+  if(SaveDir.isEmpty())
+  {
+    return;
+  }
+  EventBrowser *eventBrowser = (EventBrowser*)m_Ctx.GetEventBrowser()->Widget();
+  BufferViewer *bufferViewer = (BufferViewer*)m_Ctx.GetMeshPreview()->Widget();
+  TextureViewer *textureViewer = (TextureViewer *)m_Ctx.GetTextureViewer()->Widget();
+  const rdcarray<ActionDescription> &Actions = GetActions();
+  
+  for(const ActionDescription &Action : Actions)
+  {
+    if(!(Action.flags & ActionFlags::Drawcall))
+    {
+      continue;
+    }
+    eventBrowser->SelectEvent(Action.eventId);
+    m_Ctx.SetEventID({this}, Action.eventId, Action.eventId);
+    QCoreApplication::processEvents();
+    bufferViewer->update();
+    QDir Dir(SaveDir + tr("\\") + QString::number(Action.eventId));
+    QString Path = Dir.path();
+    if(!Dir.exists())
+    {
+      Dir.mkpath(Path);
+    }
+    bufferViewer->ExportData(Dir.path() + tr("\\") + QString::number(Action.eventId), 
+                                BufferExport::CSV, MeshDataStage::VSIn);
+  }
+}
+
+void MainWindow::ExportAllMesh(const ExportMeshData& exportMeshData)
+{
+  
+  EventBrowser *eventBrowser = (EventBrowser*)m_Ctx.GetEventBrowser()->Widget();
+  BufferViewer *bufferViewer = (BufferViewer*)m_Ctx.GetMeshPreview()->Widget();
+  TextureViewer *textureViewer = (TextureViewer *)m_Ctx.GetTextureViewer()->Widget();
+  const rdcarray<ActionDescription> &Actions = GetActions();
+
+  QDir Dir(exportMeshData.savePath);
+  QString Path = Dir.path();
+  if(!Dir.exists())
+  {
+    Dir.mkpath(Path);
+  }
+  
+  CSVGeometry GeoData;
+  if(exportMeshData.startActionId == exportMeshData.endActionId)
+  {
+    Path = Path + QString(tr("\\ExportMesh_%1\\")).arg(exportMeshData.startActionId);
+  }
+  else
+  {
+    Path = Path + QString(tr("\\ExportMesh_%1-%2\\")).arg(exportMeshData.startActionId).arg(exportMeshData.endActionId);
+  }
+
+  QString MergOutPath = Path + tr("Mesh.fbx");
+  FBXManager fbxmanager = FBXManager();
+
+  for(const ActionDescription &Action : Actions)
+  {
+    if(!(Action.flags & ActionFlags::Drawcall) && Action.baseVertex)
+    {
+      continue;
+    }
+    int TriangleNum = (Action.numIndices * (Action.numInstances == 0 ? 1 : Action.numInstances)) / 3;
+
+    if(TriangleNum < 20)
+    {
+      continue;
+    }
+
+    //Test
+    if(Action.actionId > exportMeshData.endActionId || Action.actionId < exportMeshData.startActionId)
+      continue;
+
+    
+    eventBrowser->SelectEvent(Action.eventId);
+    m_Ctx.SetEventID({this}, Action.eventId, Action.eventId);
+    QCoreApplication::processEvents();
+    bufferViewer->update();
+    // QString OutPath = Path + tr("\\") + QString::number(Action.actionId) + tr(".fbx");
+    // QFile *f = new QFile(MergOutPath);
+    // CSVGeometry GeoData;
+    ResourceId resID = ResourceId::Null();
+    const PipeState& state = m_Ctx.CurPipelineState();
+    if(state.IsCaptureD3D11())
+    {
+      resID = m_Ctx.CurD3D11PipelineState()->pixelShader.resourceId;
+    }
+    else if(state.IsCaptureD3D12())
+    {
+      resID = m_Ctx.CurD3D12PipelineState()->pixelShader.resourceId;
+    }
+    else if(state.IsCaptureGL())
+    {
+      resID = m_Ctx.CurGLPipelineState()->fragmentShader.shaderResourceId;
+    }
+    else if(state.IsCaptureVK())
+    {
+      resID = m_Ctx.CurVulkanPipelineState()->fragmentShader.resourceId;
+    }
+    
+    // if(exportMeshData.bExportTexture && resID != ResourceId::Null() && resID.id != 0)
+    // {
+    //   ExportTexture(resID, Path);
+    // }
+    // uint64_t shaderId = resID == ResourceId::Null()? 0: resID.id;
+    // if(exportMeshData.bMergeMesh)
+    // {
+    //   bufferViewer->GenGeometry(GeoData, resID.id, exportMeshData.meshSetting, exportMeshData.exportType, exportMeshData.inverseMat);
+    // }
+    // else
+    // {
+    //   CSVGeometry MeshGeoData;
+    //   QString OutPath = Path + tr("\\") + QString::number(Action.actionId) + tr(".fbx");
+    //   bufferViewer->GenGeometry(MeshGeoData, resID.id, exportMeshData.meshSetting, exportMeshData.exportType, exportMeshData.inverseMat);
+    //   fbxmanager.OutputFBX(OutPath.toStdString().c_str(), MeshGeoData, exportMeshData.bReverseTraiangle);
+    // }
+    
+  }
+  if(exportMeshData.bMergeMesh)
+  {
+    fbxmanager.OutputFBX(MergOutPath.toStdString().c_str(), GeoData, exportMeshData.bReverseTraiangle);
+  }
+  
+}
+
+static TextureSave tmpSaveCfg;
+
+void MainWindow::ExportTexture(ResourceId resId, const QString& path)
+{
+  // int outIndex = 0;
+  // int inIndex = 0;
+  // uint captureBatch = 0;
+  // bool copy = false;
+  // QString currDir = path + QString(tr("\\ShaderRes_%1")).arg(resId.id);
+  // QDir dir(currDir);
+  // dir.mkpath(currDir);
+  //
+  // ShaderStage stage = ShaderStage::Pixel;
+  //
+  // const PipeState& state = m_Ctx.CurPipelineState();
+  // ShaderReflection* details;
+  // ShaderBindpointMapping mapping;
+  // if(state.IsCaptureD3D11())
+  // {
+  //   details = m_Ctx.CurD3D11PipelineState()->pixelShader.reflection;
+  //   mapping = m_Ctx.CurD3D11PipelineState()->pixelShader.bindpointMapping;
+  // }
+  // else if(state.IsCaptureD3D12())
+  // {
+  //   details = m_Ctx.CurD3D12PipelineState()->pixelShader.reflection;
+  //   mapping = m_Ctx.CurD3D12PipelineState()->pixelShader.bindpointMapping;
+  // }
+  // else if(state.IsCaptureGL())
+  // {
+  //   details = m_Ctx.CurGLPipelineState()->fragmentShader.reflection;
+  //   mapping = m_Ctx.CurGLPipelineState()->fragmentShader.bindpointMapping;
+  // }
+  // else if(state.IsCaptureVK())
+  // {
+  //   details = m_Ctx.CurVulkanPipelineState()->fragmentShader.reflection;
+  //   mapping = m_Ctx.CurVulkanPipelineState()->fragmentShader.bindpointMapping;
+  // }
+  //
+  //
+  // rdcarray<BoundResourceArray> m_ReadWriteResources =
+  //       Following::GetReadWriteResources(m_Ctx, stage, false);
+  // rdcarray<BoundResourceArray> m_ReadOnlyResources =
+  //     Following::GetReadOnlyResources(m_Ctx, stage, false);
+  //
+  // SaveStageResourcePreviews(stage, details->readOnlyResources,
+  //                               mapping.readOnlyResources, m_ReadOnlyResources,
+  //                               inIndex, copy, false, currDir);
+}
+
+// void MainWindow::SaveStageResourcePreviews(ShaderStage stage,
+//     const rdcarray<ShaderResource> &resourceDetails, const rdcarray<Bindpoint> &mapping,
+//     rdcarray<BoundResourceArray> &ResList, int &PrevIndex, bool Copy, bool rw,
+//     const QString &SavePath)
+// {
+//   for(int idx=0; idx < mapping.count(); idx++)
+//   {
+//     const Bindpoint &key = mapping[idx];
+//  
+//     const rdcarray<BoundResource> *resArray = NULL;
+//     uint32_t dynamicallyUsedResCount = 1;
+//     int32_t firstIndex = 0;
+//  
+//     int residx = ResList.indexOf(key);
+//     if(residx >= 0)
+//     {
+//       resArray = &ResList[residx].resources;
+//       dynamicallyUsedResCount = ResList[residx].dynamicallyUsedCount;
+//       firstIndex = ResList[residx].firstIndex;
+//     }
+//  
+//     int arrayLen = resArray != NULL ? resArray->count() : 1;
+//  
+//     const bool collapseArray = arrayLen > 8 && (dynamicallyUsedResCount > 20);
+//  
+//     for(int i = 0; i < arrayLen; i++)
+//     {
+//       int arrayIdx = firstIndex + i;
+//  
+//       if(resArray && i >= resArray->count())
+//         break;
+//  
+//       if(resArray && !resArray->at(i).dynamicallyUsed)
+//         continue;
+//  
+//       BoundResource res = {};
+//  
+//       if(resArray)
+//         res = resArray->at(i);
+//  
+//       // Following follow(m_Ctx.GetTextureViewer(), rw ? FollowType::ReadWrite : FollowType::ReadOnly, stage, idx,
+//       //                  arrayIdx);
+//  
+//       // show if it's referenced by the shader - regardless of empty or not
+//       bool show = key.used || Copy;
+//       // it's bound, but not referenced, and we have "show disabled"
+//       show = show || res.resourceId != ResourceId();
+//  
+//       // it's empty, and we have "show empty"
+//       show = show || (res.resourceId == ResourceId());
+//       // it's the one we're following
+//       // show = show || (follow == m_Following);
+//       if(!show)
+//       {
+//         continue;
+//       }
+//       
+//       tmpSaveCfg.resourceId = res.resourceId;
+//       tmpSaveCfg.destType = FileType::TGA;
+//       tmpSaveCfg.channelExtract = -1;
+//       tmpSaveCfg.alphaCol = FloatVector(0, 0, 0, 0);
+//       uint64_t currId = *((uint64_t*)&res.resourceId);
+//       QString fn = QString(tr("%1\\%2.tga")).arg(SavePath).arg(currId);
+//       ResultDetails result = {ResultCode::Succeeded};
+//       
+//       m_Ctx.Replay().BlockInvoke(
+//           [this, &result, fn](IReplayController *r) { result = r->SaveTexture(tmpSaveCfg, fn); });
+//       
+//       if(!result.OK())
+//       {
+//         RDDialog::critical(NULL, tr("Error saving texture"),
+//                            tr("Error saving texture %1:\n\n%2").arg(fn).arg(result.Message()));
+//       }
+//     }
+//   }
+//   
+// }
+
+void MainWindow::AddXYCustomTool()
+{
+  // QAction *ExportAllXML_Action = new QAction(tr("Mesh导出"));
+  // QObject::connect(ExportAllXML_Action, &QAction::triggered, this, &MainWindow::OpenExportMeshSettingDialog);
+  // ui->menu_XYTools->addAction(ExportAllXML_Action);
+  //
+  // QAction *GlobalHook_Action = new QAction(tr("GlobalHook"));
+  // QObject::connect(GlobalHook_Action, &QAction::triggered, this, &MainWindow::OpenGlobalHookWindow);
+  // ui->menu_XYTools->addAction(GlobalHook_Action);
+  //
+  // QAction *StatTriangles_Action = new QAction(tr("StatTrianglesNum"));
+  // QObject::connect(StatTriangles_Action, &QAction::triggered, this, &MainWindow::OpenStatTrianglesDialog);
+  // ui->menu_XYTools->addAction(StatTriangles_Action);
+}
+
+QList<ActionDescription> MainWindow::GetActions()
+{
+  QList<ActionDescription> OutActions;
+  rdcarray<ActionDescription> RootActions = const_cast<const rdcarray<ActionDescription>&>(m_Ctx.CurRootActions());
+  for(ActionDescription &Action : RootActions)
+  {
+    OutActions.append(Action);
+    GetActions(Action.children, OutActions);
+  }
+  return OutActions;
+}
+
+void MainWindow::GetActions(rdcarray<ActionDescription> &InActions,
+    QList<ActionDescription> &OutActions)
+{
+  for(ActionDescription &Action : InActions)
+  {
+    OutActions.append(Action);
+    GetActions(Action.children, OutActions);
+  }
+}
+
+uint32_t MainWindow::StatTrianlgesNum(uint32_t StartId, uint32_t EndId)
+{
+  uint32_t Sum = 0;
+  for(uint32_t i = StartId; i <= EndId; i++)
+  {
+    const ActionDescription* ac = m_Ctx.GetAction(i);
+    if(ac)
+    {
+      Sum += (ac->numIndices * (ac->numInstances == 0 ? 1 : ac->numInstances)) / 3;
+    }
+  }
+  return Sum;
+}
+
+uint32_t MainWindow::StatTrianglesInfoByMaterialId(uint32_t MaterialId, QList<uint32_t> &OutEvents)
+{
+  EventBrowser *eventBrowser = (EventBrowser*)m_Ctx.GetEventBrowser()->Widget();
+  BufferViewer *bufferViewer = (BufferViewer*)m_Ctx.GetMeshPreview()->Widget();
+  TextureViewer *textureViewer = (TextureViewer *)m_Ctx.GetTextureViewer()->Widget();
+  const rdcarray<ActionDescription> &Actions = GetActions();
+
+  int TriangleSum = 0;
+  OutEvents.clear();
+  for(const ActionDescription &Action : Actions)
+  {
+    if(!(Action.flags & ActionFlags::Drawcall) && Action.baseVertex)
+    {
+      continue;
+    }
+    int TriangleNum = (Action.numIndices * (Action.numInstances == 0 ? 1 : Action.numInstances)) / 3;
+    
+    eventBrowser->SelectEvent(Action.eventId);
+    m_Ctx.SetEventID({this}, Action.eventId, Action.eventId);
+    // QCoreApplication::processEvents();
+    // bufferViewer->update();
+ 
+    ResourceId VertexResID = ResourceId::Null();
+    ResourceId PixelResID = ResourceId::Null();
+    const PipeState& state = m_Ctx.CurPipelineState();
+    if(state.IsCaptureD3D11())
+    {
+      VertexResID = m_Ctx.CurD3D11PipelineState()->vertexShader.resourceId;
+      PixelResID = m_Ctx.CurD3D11PipelineState()->pixelShader.resourceId;
+    }
+    else if(state.IsCaptureD3D12())
+    {
+      VertexResID = m_Ctx.CurD3D12PipelineState()->vertexShader.resourceId;
+      PixelResID = m_Ctx.CurD3D12PipelineState()->pixelShader.resourceId;
+    }
+    else if(state.IsCaptureGL())
+    {
+      VertexResID = m_Ctx.CurGLPipelineState()->vertexShader.shaderResourceId;
+      PixelResID = m_Ctx.CurGLPipelineState()->fragmentShader.shaderResourceId;
+    }
+    else if(state.IsCaptureVK())
+    {
+      VertexResID = m_Ctx.CurVulkanPipelineState()->vertexShader.resourceId;
+      PixelResID = m_Ctx.CurVulkanPipelineState()->fragmentShader.resourceId;
+    }
+    
+    // if(VertexResID.id == MaterialId || PixelResID.id == MaterialId)
+    // {
+    //   TriangleSum += TriangleNum;
+    //   OutEvents.append(Action.eventId);
+    // }
+  }
+
+  return TriangleSum;
+}
+
+void MainWindow::StatGameTrianglesData(uint32_t &AllTrianglesNum, uint32_t &ColorPassTrianglesNum,
+    uint32_t &DepthPassTrianglesNum, uint32_t &TransparentTrianglesNum, uint32_t& DrawCallsNum, QList<uint32_t> &OutEvents)
+{
+  EventBrowser *eventBrowser = (EventBrowser*)m_Ctx.GetEventBrowser()->Widget();
+  BufferViewer *bufferViewer = (BufferViewer*)m_Ctx.GetMeshPreview()->Widget();
+  TextureViewer *textureViewer = (TextureViewer *)m_Ctx.GetTextureViewer()->Widget();
+  const rdcarray<ActionDescription> &Actions = GetActions();
+  OutEvents.clear();
+  DrawCallsNum = m_Ctx.GetLastAction()->actionId;
+  AllTrianglesNum = ColorPassTrianglesNum = DepthPassTrianglesNum = TransparentTrianglesNum = 0;
+  for(const ActionDescription &Action : Actions)
+  {
+    if(!(Action.flags & ActionFlags::Drawcall) && Action.baseVertex)
+    {
+      continue;
+    }
+    int TriangleNum = (Action.numIndices * (Action.numInstances == 0 ? 1 : Action.numInstances)) / 3;
+    AllTrianglesNum += TriangleNum;
+    if(Action.customName.contains("Depth-only Pass"))
+    {
+      DepthPassTrianglesNum += GetTriangle(&Action);
+    }
+    else if(Action.customName.contains("Colour Pass"))
+    {
+      ColorPassTrianglesNum += GetTriangle(&Action);
+    }
+    
+    eventBrowser->SelectEvent(Action.eventId);
+    m_Ctx.SetEventID({this}, Action.eventId, Action.eventId);
+    // QCoreApplication::processEvents();
+    // bufferViewer->update();
+ 
+    bool istransparent = false;
+    const PipeState& state = m_Ctx.CurPipelineState();
+    if(state.IsCaptureD3D11())
+    {
+      rdcarray<ColorBlend> blends = m_Ctx.CurD3D11PipelineState()->outputMerger.blendState.blends;
+      for(ColorBlend blend : blends)
+      {
+        if(blend.colorBlend.source == BlendMultiplier::SrcAlpha || blend.colorBlend.source == BlendMultiplier::InvSrcAlpha)
+        {
+          istransparent = true;
+          break;
+        }
+      }
+    }
+    else if(state.IsCaptureD3D12())
+    {
+      rdcarray<ColorBlend> blends = m_Ctx.CurD3D12PipelineState()->outputMerger.blendState.blends;
+      for(ColorBlend blend : blends)
+      {
+        if(blend.colorBlend.source == BlendMultiplier::SrcAlpha || blend.colorBlend.source == BlendMultiplier::InvSrcAlpha)
+        {
+          istransparent = true;
+          break;
+        }
+      }
+    }
+    else if(state.IsCaptureGL())
+    {
+      // PixelResID = m_Ctx.CurGLPipelineState()->fragmentShader.shaderResourceId;
+      // rdcarray<ColorBlend> blends = m_Ctx.CurGLPipelineState()->colorBlend.blends;
+      // for(ColorBlend blend : blends)
+      // {
+      //   if(blend.colorBlend.source == BlendMultiplier::SrcAlpha || blend.colorBlend.source == BlendMultiplier::InvSrcAlpha)
+      //   {
+      //     istransparent = true;
+      //     break;
+      //   }
+      // }
+    }
+    else if(state.IsCaptureVK())
+    {
+      rdcarray<ColorBlend> blends = m_Ctx.CurVulkanPipelineState()->colorBlend.blends;
+      for(ColorBlend blend : blends)
+      {
+        if(blend.colorBlend.source == BlendMultiplier::SrcAlpha || blend.colorBlend.source == BlendMultiplier::InvSrcAlpha)
+        {
+          istransparent = true;
+          break;
+        }
+      }
+    }
+
+    if(istransparent)
+    {
+      TransparentTrianglesNum += TriangleNum;
+      OutEvents.append(Action.eventId);
+    }
+    
+  }
+
+}
+
+uint32_t MainWindow::GetTriangle(const ActionDescription* action)
+{
+  uint32_t OutTriangle = 0;
+  OutTriangle += 
+      (action->numIndices * (action->numInstances == 0 ? 1 : action->numInstances)) / 3;
+  for(const ActionDescription& ac : action->children)
+  {
+    if(!ac.IsFakeMarker())
+    {
+      OutTriangle += GetTriangle(&ac);
+    }
+  }
+  return OutTriangle;
+}
+
+// --Dudechen
 
 MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::MainWindow), m_Ctx(ctx)
 {
@@ -500,6 +1000,10 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
   ui->extension_dummy_Help->setVisible(false);
 
   RegisterShortcut("ALT+R", this, [this](QWidget *) { contextChooser->click(); });
+
+  // ++Dudechen
+  AddXYCustomTool();
+  // --Dudechen
 }
 
 MainWindow::~MainWindow()

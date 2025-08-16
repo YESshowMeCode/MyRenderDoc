@@ -24,6 +24,7 @@
 
 #include "ShaderViewer.h"
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -34,9 +35,11 @@
 #include <QPen>
 #include <QSet>
 #include <QShortcut>
+#include <QTimer>
 #include <QToolTip>
 #include "Code/Resources.h"
 #include "Code/ScintillaSyntax.h"
+#include "Code/Interface/ShaderProcessingTool.h"
 #include "Widgets/Extended/RDLabel.h"
 #include "Widgets/FindReplace.h"
 #include "scintilla/include/SciLexer.h"
@@ -44,6 +47,12 @@
 #include "toolwindowmanager/ToolWindowManager.h"
 #include "toolwindowmanager/ToolWindowManagerArea.h"
 #include "ui_ShaderViewer.h"
+
+//++[Dudechen]
+#include <QDesktopServices>
+#include <QTimer>
+#include "Code/Interface/ShaderProcessingTool.h"
+//--[Dudechen]
 
 #if defined(RELEASE)
 #define SHADER_VARIABLE_CHANGE_CONSISTENCY_CHECKS 0
@@ -493,6 +502,246 @@ void ShaderViewer::editShader(ResourceId id, ShaderStage stage, const QString &e
 
   m_Errors = MakeEditor(lit("errors"), QString(), SCLEX_NULL);
   m_Errors->setReadOnly(true);
+  m_Errors->setWindowTitle(lit("Errors"));
+
+  // remove margins
+  m_Errors->setMarginWidthN(0, 0);
+  m_Errors->setMarginWidthN(1, 0);
+  m_Errors->setMarginWidthN(2, 0);
+
+  QObject::connect(m_Errors, &ScintillaEdit::keyPressed, this, &ShaderViewer::readonly_keyPressed);
+
+  ui->docking->addToolWindow(
+      m_Errors, ToolWindowManager::AreaReference(ToolWindowManager::BottomOf,
+                                                 ui->docking->areaOf(m_Scintillas.front()), 0.2f));
+  ui->docking->setToolWindowProperties(
+      m_Errors, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+
+  if(!m_CustomShader)
+  {
+    ui->compilationGroup->setWindowTitle(tr("Compilation Settings"));
+    ui->docking->addToolWindow(ui->compilationGroup,
+                               ToolWindowManager::AreaReference(
+                                   ToolWindowManager::LeftOf, ui->docking->areaOf(m_Errors), 0.5f));
+    ui->docking->setToolWindowProperties(
+        ui->compilationGroup,
+        ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+  }
+}
+
+//++[Dudechen]
+// File Name:
+// Resource     HLSL:       resource_hlsl
+// Resource     DXBC:       resource_dxbc
+// Source       DXBC:       source_dxbc
+// Decompiled   HLSL:       decompiled_hlsl
+// Decompiled   DXBC:       decompiled_dxbc
+DecompileShaderTemporalFileType ToDecompileTemporalFileType(QString fileName)
+{
+  DecompileShaderTemporalFileType type= DecompileShaderTemporalFileType::None;
+  if (fileName.contains(lit("resource_hlsl")))
+  {
+      return DecompileShaderTemporalFileType::ResourceHlsl;
+  }
+  else if (fileName.contains(lit("resource_dxbc")))
+  {
+       return DecompileShaderTemporalFileType::ResourceDxbcReadable;
+  }
+  else if (fileName.contains(lit("source_dxbc")))
+  {
+     return DecompileShaderTemporalFileType::SourceDxbcReadable;
+  }
+  else if (fileName.contains(lit("decompiled_hlsl")))
+  {
+      return DecompileShaderTemporalFileType::DecompiledHlsl;
+  }
+  else if (fileName.contains(lit("decompiled_dxbc")))
+  {
+    return DecompileShaderTemporalFileType::DecompiledDxbcReadable;
+  }
+  else
+  {
+    // 
+    //assert(0);
+    return DecompileShaderTemporalFileType::None;
+  }
+}
+//--[Dudechen]
+QString ShaderViewer::formatShaderStage(ShaderStage stage)
+{
+  switch (stage)
+  {
+    case ShaderStage::Compute: return lit("cs");
+    case ShaderStage::Fragment: return lit("ps");
+    case ShaderStage::Vertex: return lit("vs");
+    default: return lit("ps");
+  }
+}
+void ShaderViewer::decompileShader(ResourceId id, ShaderStage stage, const QString &entryPoint,
+                              const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                                   ShaderCompileFlags flags, const ShaderReflection *shader)
+{
+  m_Scintillas.removeOne(m_DisassemblyView);
+  ui->docking->removeToolWindow(m_DisassemblyFrame);
+
+  m_ShaderDetails = shader;
+  m_DisassemblyView = NULL;
+
+  m_Stage = stage;
+  m_Flags = flags;
+
+  m_CustomShader = (id == ResourceId());
+  m_EditingShader = id;
+
+  // set up compilation parameters
+  for(ShaderEncoding i : values<ShaderEncoding>())
+    if(IsTextRepresentation(i) || shaderEncoding == i)
+      m_Encodings << i;
+
+  QStringList strs;
+  strs.clear();
+  for(ShaderEncoding i : m_Encodings)
+    strs << ToQStr(i);
+
+  ui->encoding->addItems(strs);
+  ui->encoding->setCurrentIndex(m_Encodings.indexOf(shaderEncoding));
+  ui->entryFunc->setText(entryPoint);
+
+  QObject::connect(ui->entryFunc, &QLineEdit::textChanged,
+                   [this](const QString &) { MarkModification(); });
+  QObject::connect(ui->toolCommandLine, &QTextEdit::textChanged, [this]() { MarkModification(); });
+
+  PopulateCompileTools();
+
+  QObject::connect(ui->encoding, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
+                   [this](int) {
+                     PopulateCompileTools();
+                     MarkModification();
+                   });
+  QObject::connect(ui->compileTool, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
+                   [this](int) {
+                     PopulateCompileToolParameters();
+                     MarkModification();
+                   });
+
+  // if it's a custom shader, hide the group entirely (don't allow customisation of compile
+  // parameters). We can still use it to store the parameters passed in. When visible we collapse it
+  // by default.
+  if(m_CustomShader)
+    ui->compilationGroup->hide();
+
+  // hide debugging windows
+  ui->watch->hide();
+  ui->debugVars->hide();
+  ui->constants->hide();
+  ui->resourcesPanel->hide();
+  ui->callstack->hide();
+  ui->sourceVars->hide();
+
+  ui->snippets->setVisible(m_CustomShader);
+
+  // hide debugging toolbar buttons
+  ui->debugSep->hide();
+  ui->execBackwards->hide();
+  ui->run->hide();
+  ui->stepBack->hide();
+  ui->stepNext->hide();
+  ui->runToCursor->hide();
+  ui->runToSample->hide();
+  ui->runToNaNOrInf->hide();
+  ui->regFormatSep->hide();
+  ui->intView->hide();
+  ui->floatView->hide();
+  ui->debugToggleSep->hide();
+  ui->debugToggle->hide();
+
+  // hide signatures
+  ui->inputSig->hide();
+  ui->outputSig->hide();
+
+  QString title;
+
+  QObject::connect(ui->decompileBtn, &QToolButton::clicked, this, &ShaderViewer::on_decompileShaderToggle_clicked);
+
+  QWidget *sel = NULL;
+
+  m_decompileEditorWidgetMap.clear();
+  m_decompileTemporalFileEditorMap.clear();
+  m_decompileTemporalTypeFilePathMap.clear();
+
+  for(const rdcstrpair &kv : files)
+  {
+    QFileInfo fileInfo = QFileInfo(kv.first);
+    QString name = fileInfo.fileName();
+    _decompileTemporalPath = fileInfo.path();
+
+    QString ext = fileInfo.completeSuffix();
+
+    ScintillaEdit *scintilla = AddFileScintilla(name, lit(""), shaderEncoding);
+    auto fileType = ToDecompileTemporalFileType(name);
+
+    if(fileType == DecompileShaderTemporalFileType::DecompiledDxbcReadable ||
+       fileType == DecompileShaderTemporalFileType::ResourceDxbcReadable
+        || fileType == DecompileShaderTemporalFileType::SourceDxbcReadable)
+    {
+      scintilla->setReadOnly(true);
+    }
+    else
+    {
+      scintilla->setReadOnly(false);
+
+      QObject::connect(scintilla, &ScintillaEdit::keyPressed, this,
+                       &ShaderViewer::editable_keyPressed);
+
+      QObject::connect(scintilla, &ScintillaEdit::modified,
+                       [this](int type, int, int, int, const QByteArray &, int, int, int) {
+                         if(type & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT | SC_MOD_BEFOREINSERT |
+                                    SC_MOD_BEFOREDELETE))
+                           m_FindState = FindState();
+
+                         MarkModification();
+                       });
+    }
+
+    if (fileType == DecompileShaderTemporalFileType::DecompiledHlsl)
+    {
+      m_Ctx.GetMainWindow()->RegisterShortcut(QKeySequence(QKeySequence::Refresh).toString(), this,
+          [this](QWidget *) { on_refresh_decompiled_shader_clicked(); });
+      ui->refresh->disconnect();
+      QObject::connect(ui->refresh, &QToolButton::clicked, this,
+                       &ShaderViewer::on_refresh_decompiled_shader_clicked);
+      
+      ui->refresh->setToolTip(ui->refresh->toolTip() +
+                              lit(" (%1)").arg(QKeySequence(QKeySequence::Refresh).toString()));
+    }
+
+
+    QWidget *w = (QWidget *)scintilla;
+    w->setProperty("filename", kv.first);
+    m_decompileEditorWidgetMap.insert(scintilla, w);
+    m_decompileTemporalFileEditorMap.insert(fileType, scintilla);
+    m_decompileTemporalTypeFilePathMap.insert(fileType, kv.first);
+  }
+  disassemblySourceDxbc();
+  refreshShaderEditor();
+  //sel = m_decompileTemporalFileEditorMap[DecompileShaderTemporalFileType::ResourceHlsl];
+  //if(sel != NULL)
+  //  ToolWindowManager::raiseToolWindow(sel);
+
+  gotoEditorPage(DecompileShaderTemporalFileType::ResourceHlsl);
+
+  if(m_CustomShader)
+    title.prepend(tr("Editing %1 Shader").arg(ToQStr(stage, m_Ctx.APIProps().pipelineType)));
+  else
+    title.prepend(tr("Editing %1").arg(m_Ctx.GetResourceNameUnsuffixed(id)));
+
+  setWindowTitle(title);
+
+  if(files.count() > 2)
+    addFileList();
+
+  m_Errors = MakeEditor(lit("errors"), QString(), SCLEX_NULL);
+  m_Errors->setReadOnly(false);
   m_Errors->setWindowTitle(lit("Errors"));
 
   // remove margins
@@ -1371,7 +1620,7 @@ void ShaderViewer::ConfigureBookmarkMenu()
                    });
 
   bookmarkMenu->addSeparator();
-  ui->bookmark->setMenu(bookmarkMenu);
+  // ui->bookmark->setMenu(bookmarkMenu);
 }
 
 void ShaderViewer::UpdateBookmarkMenu(QMenu *menu, QAction *nextAction, QAction *prevAction,
@@ -1563,6 +1812,16 @@ ShaderViewer *ShaderViewer::LoadEditor(ICaptureContext &ctx, QVariantMap data,
 
   return view;
 }
+
+//++[Dudechen] 
+void ShaderViewer::gotoEditorPage(DecompileShaderTemporalFileType type) 
+{
+  _currentEditor = m_decompileTemporalFileEditorMap[type];
+  auto* widget = m_decompileEditorWidgetMap[m_decompileTemporalFileEditorMap[type]];
+  ToolWindowManager::raiseToolWindow(widget);
+  widget->setFocus(Qt::MouseFocusReason);
+}
+//--[Dudechen]
 
 QVariantMap ShaderViewer::SaveEditor()
 {
@@ -6569,6 +6828,379 @@ void ShaderViewer::on_debugToggle_clicked()
 
   updateDebugState();
 }
+
+//++[Dudechen]
+DecompileShaderTemporalFileType ShaderViewer::getCurrentEditorFileType()
+{
+  for(auto p : m_decompileTemporalFileEditorMap.toStdMap())
+  {
+    if(p.second == _currentEditor)
+    {
+      return p.first;
+    }
+  }
+  return DecompileShaderTemporalFileType::ResourceHlsl;
+}
+
+void ShaderViewer::on_resHLSLBtn_clicked()
+{
+  gotoEditorPage(DecompileShaderTemporalFileType::ResourceHlsl);
+}
+void ShaderViewer::on_dxbcSrcResToggle_clicked()
+{
+  if(getCurrentEditorFileType() == DecompileShaderTemporalFileType::SourceDxbcReadable)
+  {
+    ui->dxbcSrcResToggle->setText(tr("DXBC(Resource)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::ResourceDxbcReadable);
+  }
+  else
+  {
+    ui->dxbcSrcResToggle->setText(tr("DXBC(Source)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::SourceDxbcReadable);
+  }
+}
+void ShaderViewer::on_decompileShaderHlslDxbcToggle_clicked()
+{
+  if(getCurrentEditorFileType() == DecompileShaderTemporalFileType::DecompiledDxbcReadable)
+  {
+    ui->decompileShaderHlslDxbcToggle->setText(tr("DecompileShader(HLSL)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::DecompiledHlsl);
+  }
+  else
+  {
+    ui->decompileShaderHlslDxbcToggle->setText(tr("DecompileShader(DXBC)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::DecompiledDxbcReadable);
+  }
+}
+
+void ShaderViewer::on_dxbcDecompileSourceToggle_clicked()
+{
+  if(getCurrentEditorFileType() == DecompileShaderTemporalFileType::DecompiledDxbcReadable)
+  {
+    ui->dxbcDecompileSourceToggle->setText(tr("DXBC(Source)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::SourceDxbcReadable);
+  }
+  else
+  {
+    ui->dxbcDecompileSourceToggle->setText(tr("DXBC(Decompile)"));
+    gotoEditorPage(DecompileShaderTemporalFileType::DecompiledDxbcReadable);
+  }
+}
+
+void ShaderViewer::on_refresh_decompiled_shader_clicked() 
+{
+  if(m_Trace)
+  {
+    m_Ctx.GetPipelineViewer()->SaveShaderFile(m_ShaderDetails);
+    return;
+  }
+
+  //Empty errors
+  ShowErrors(lit(""));
+  ShaderEncoding encoding = currentEncoding();
+
+  // if we don't have any compile tools - even the 'builtin' one, this compilation is not going to
+  // succeed.
+  if(ui->compileTool->count() == 0 && !m_CustomShader)
+  {
+    ShowErrors(tr("No compilation tool found that takes %1 as input and produces compatible output")
+                   .arg(ToQStr(encoding)));
+  }
+  else if(m_SaveCallback)
+  {
+    rdcstrpairs files;
+    ScintillaEdit* editor =
+        m_decompileTemporalFileEditorMap[DecompileShaderTemporalFileType::DecompiledHlsl];
+      QWidget *w = (QWidget *)editor;
+      files.push_back({w->property("filename").toString(),
+                       QString::fromUtf8(editor->getText(editor->textLength() + 1))});
+      saveTempShaderFile(
+          m_decompileTemporalTypeFilePathMap
+              [DecompileShaderTemporalFileType::DecompiledHlsl],
+              editor->getText(editor->textLength() + 1));
+    if(files.isEmpty())
+      return;
+
+    QString source = files[0].second;
+
+    if(encoding == ShaderEncoding::HLSL || encoding == ShaderEncoding::GLSL)
+    {
+      bool success = ProcessIncludeDirectives(source, files);
+      if(!success)
+        return;
+    }
+
+    bytebuf shaderBytes(source.toUtf8());
+
+    rdcarray<ShaderEncoding> accepted = m_Ctx.TargetShaderEncodings();
+    rdcstr spirvVer = "spirv1.0";
+    for(const ShaderCompileFlag &flag : m_Flags.flags)
+      if(flag.name == "@spirver")
+        spirvVer = flag.value;
+    if(m_CustomShader || (accepted.indexOf(encoding) >= 0 &&
+                          ui->compileTool->currentIndex() == ui->compileTool->count() - 1))
+    {
+      // if using the builtin compiler, just pass through
+    }
+    else
+    {
+      for(const ShaderProcessingTool &tool : m_Ctx.Config().ShaderProcessors)
+      {
+        if(QString(tool.name) == ui->compileTool->currentText())
+        {
+          ShaderToolOutput out = tool.CompileShader(this, source, ui->entryFunc->text(), m_Stage,
+                                                    spirvVer, ui->toolCommandLine->toPlainText());
+
+          ShowErrors(out.log);
+
+          if(out.result.isEmpty())
+            return;
+
+          encoding = tool.output;
+          shaderBytes = out.result;
+          break;
+        }
+      }
+    }
+
+    ShaderCompileFlags flags = m_Flags;
+
+    bool found = false;
+    for(ShaderCompileFlag &f : flags.flags)
+    {
+      if(f.name == "@cmdline")
+      {
+        f.value = ui->toolCommandLine->toPlainText();
+        found = true;
+        break;
+      }
+    }
+
+    if(!found)
+      flags.flags.push_back({"@cmdline", ui->toolCommandLine->toPlainText()});
+
+    m_Modified = false;
+
+    m_SaveCallback(&m_Ctx, this, m_EditingShader, m_Stage, encoding, flags, ui->entryFunc->text(),
+                   shaderBytes);
+
+    QTimer::singleShot(
+        500, this, [this]()
+    {
+      //TODO: Currently only support dx11
+      const D3D11Pipe::Shader *stage;
+      if(m_Stage == ShaderStage::Pixel)
+          stage = &m_Ctx.CurD3D11PipelineState()->pixelShader;
+      else if(m_Stage == ShaderStage::Vertex) 
+          stage = &m_Ctx.CurD3D11PipelineState()->vertexShader;
+      else if(m_Stage == ShaderStage::Compute) 
+          stage = &m_Ctx.CurD3D11PipelineState()->computeShader;
+      else 
+          stage = NULL;
+
+      if(stage == NULL || stage->resourceId == ResourceId())
+        return;
+
+        disassemblyCurrentPipelineDxbc(
+          m_decompileTemporalTypeFilePathMap[DecompileShaderTemporalFileType::DecompiledDxbcReadable],
+          *stage->reflection);
+      refreshShaderEditor();
+    });
+  }
+}
+
+void ShaderViewer::on_openFloderBtn_clicked()
+{
+  QFileInfo info(m_decompileTemporalTypeFilePathMap.values()[0]);
+  
+  QDesktopServices::openUrl(QUrl::fromLocalFile(info.path()));
+}
+
+void ShaderViewer::on_decompileShaderToggle_clicked()
+{
+  saveDecompilingTemoporalShader();
+
+  ShaderProcessingTool tool;
+  // TODO
+  tool.executable = QDir::currentPath() + lit("\\dxbc2hlsl\\DXBCtoHLSLCmd.exe");
+  rdcstr command = tool.executable;
+
+  //tool.executable = "G:\\Tool_Dev\\DXBCtoHLSL\\bin\\DXBCtoHLSLCmd.exe";
+  QStringList args;
+  /// args[0]: path contains dxbc and resource hlsl
+  /// args[1]: shader stage(current support: vs, ps, cs)
+  /// args[2]: shader entry point
+  /// args[3]: start from stage(resource, glsl) 
+  args.push_back(_decompileTemporalPath);
+  args.push_back(formatShaderStage(m_Stage));
+  args.push_back(ui->entryFunc->text());
+  command += lit("\n");
+  command += _decompileTemporalPath;
+  command += lit("\n");
+  command += formatShaderStage(m_Stage);
+  command += lit("\n");
+  command += ui->entryFunc->text();
+  
+  auto currentComboBoxText = ui->decompileStartStageComboBox->currentText(); 
+  if(currentComboBoxText == lit("ResourceDXBC"))
+  {
+    command += lit("\n");
+    command += "resource";
+    args.push_back(lit("resource"));
+  }
+  else if (currentComboBoxText == lit("GLSL"))
+  {
+    command += lit("\n");
+    command += "glsl";
+    args.push_back(lit("glsl"));
+  }
+
+  auto finalHLSLPath =
+      GDecompileShaderStageFileTypeMap[DecompileShaderTemporalFileType::DecompiledHlsl];
+  auto finalPath = _decompileTemporalPath + lit("./") + finalHLSLPath.first + finalHLSLPath.second;
+
+  auto result = RunTool(tool, this, lit(""), finalPath, args);
+
+  rdcstr strError;
+  strError.assign((const char *)result.log.data(), result.log.size());
+  // RDDialog::information(this, lit("Convert Log"), result.log);
+  RDDialog::information(this, lit("Convert Log"), command + result.log);
+
+  m_Errors->setReadOnly(false);
+  m_Errors->setText(strError.c_str());
+
+  refreshShaderEditor();
+  gotoEditorPage(DecompileShaderTemporalFileType::DecompiledHlsl);
+}
+
+//++[Dudechen] Modified by Awei
+void ShaderViewer::disassemblySourceDxbc()
+{
+  QString readableFilePath =
+      m_decompileTemporalTypeFilePathMap[DecompileShaderTemporalFileType::SourceDxbcReadable];
+  disassemblyCurrentPipelineDxbc(readableFilePath, *m_ShaderDetails);
+}
+
+void ShaderViewer::disassemblyCurrentPipelineDxbc(const QString &readableFilePath, const ShaderReflection& shaderReflection)
+{
+  QPointer<ShaderViewer> me(this);
+  m_Ctx.Replay().BlockInvoke([me, this, readableFilePath, &shaderReflection](IReplayController *r) {
+    rdcarray<rdcstr> targets = r->GetDisassemblyTargets(m_Pipeline != ResourceId());
+
+    if(m_Pipeline == ResourceId())
+    {
+      rdcarray<rdcstr> pipelineTargets = r->GetDisassemblyTargets(true);
+
+      if(pipelineTargets.size() > targets.size())
+      {
+        m_PipelineTargets = pipelineTargets;
+        m_PipelineTargets.removeIf([&targets](const rdcstr &t) { return targets.contains(t); });
+      }
+    }
+
+    rdcstr disasm = r->DisassembleShader(m_Pipeline, &shaderReflection, "");
+
+    saveTempShaderFile(readableFilePath, disasm.c_str(), disasm.count());
+  });
+}
+
+void ShaderViewer::refreshShaderEditor()
+{
+  for(const auto &fileTypeAndPath : m_decompileTemporalTypeFilePathMap.toStdMap())
+  {
+    DecompileShaderTemporalFileType fileType = fileTypeAndPath.first;
+    QString filePath = fileTypeAndPath.second;
+    QFileInfo fileInfo = QFileInfo(filePath);
+    QString name = fileInfo.fileName();
+    QString ext = fileInfo.completeSuffix();
+
+    auto editorView = m_decompileTemporalFileEditorMap[fileType];
+
+    QString text;
+
+    // readable text
+    QString path = QFileInfo(filePath).filePath();
+    QFile fileHandle(path);
+    if(fileHandle.open(QFile::ReadOnly))
+    {
+      text = QString::fromUtf8(fileHandle.readAll());
+      fileHandle.close();
+    }
+
+    bool originEditorReadOnly = editorView->readOnly();
+
+    editorView->setReadOnly(false);
+    SetTextAndUpdateMargin0(editorView, text);
+    editorView->setReadOnly(originEditorReadOnly);
+
+    editorView->emptyUndoBuffer();
+    //if(text.contains(entry))
+     // sel = editorView;
+
+   // if(sel == editorView || title.isEmpty())
+     // title = tr(" - %1 - %2()").arg(name).arg(entryPoint);
+  }
+}
+
+void ShaderViewer::saveTempShaderFile(const rdcstr &filePath, const QByteArray &code)
+{
+  auto path = filePath;
+  QDir dirinfo = QFileInfo(path).dir();
+  if(dirinfo.exists())
+  {
+    QFile f(path);
+    if(f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+      f.write(code.data(), code.size());
+    }
+    else
+    {
+      RDDialog::critical(
+          this, tr("Error saving shader"),
+          tr("Couldn't open path %1 for write.\n%2").arg(filePath).arg(f.errorString()));
+    }
+  }
+  else
+  {
+    RDDialog::critical(this, tr("Invalid directory"), tr("Cannot find target directory to save to"));
+  }
+}
+
+void ShaderViewer::saveTempShaderFile(const rdcstr &filePath, const char* code, const qint64 codeLen)
+{
+  auto path = filePath;
+  QDir dirinfo = QFileInfo(path).dir();
+  if(dirinfo.exists())
+  {
+    QFile f(path);
+    if(f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+      f.write(code, codeLen);
+    }
+    else
+    {
+      RDDialog::critical(
+          this, tr("Error saving shader"),
+          tr("Couldn't open path %1 for write.\n%2").arg(filePath).arg(f.errorString()));
+    }
+  }
+  else
+  {
+    RDDialog::critical(this, tr("Invalid directory"), tr("Cannot find target directory to save to"));
+  }
+}
+
+void ShaderViewer::saveDecompilingTemoporalShader() 
+{
+  for(auto typeAndfilePath : m_decompileTemporalTypeFilePathMap.toStdMap())
+  {
+    DecompileShaderTemporalFileType fileType = typeAndfilePath.first;
+    QString filePath = typeAndfilePath.second;
+    auto editor = m_decompileTemporalFileEditorMap[fileType];
+    saveTempShaderFile(filePath, editor->getText(editor->textLength() + 1));
+  }
+}
+//--[Dudechen]
 
 void ShaderViewer::on_resources_sortByStep_clicked()
 {

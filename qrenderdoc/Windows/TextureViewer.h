@@ -166,6 +166,11 @@ public:
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
 
+  //++Dudechen ReplaceTexture
+  void ReplaceDefaultTexture_triggered(ResourceId resId);
+  void ReplaceTexture_triggered(ResourceId resId);
+  void ResetTexture_triggered(ResourceId resId);
+
 private slots:
   // automatic slots
   void on_renderHScroll_valueChanged(int position);

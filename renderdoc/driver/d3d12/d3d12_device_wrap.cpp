@@ -1395,6 +1395,38 @@ void WrappedID3D12Device::CreateShaderResourceView(ID3D12Resource *pResource,
   SERIALISE_TIME_CALL(
       m_pDevice->CreateShaderResourceView(Unwrap(pResource), pDesc, Unwrap(DestDescriptor)));
 
+  // ++Dudechen
+  if(WrappedID3D12Resource *wResource = static_cast<WrappedID3D12Resource *>(pResource))
+  {
+    if(pDesc)
+    {
+      if(pDesc->ViewDimension == D3D12_SRV_DIMENSION::D3D12_SRV_DIMENSION_TEXTURECUBE)
+      {
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] -= wResource->MemorySize;
+        wResource->ResourceType = FResourcesType::TextureCube;
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] += wResource->MemorySize;
+      }
+      else if(pDesc->ViewDimension == D3D12_SRV_DIMENSION::D3D12_SRV_DIMENSION_TEXTURECUBEARRAY)
+      {
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] -= wResource->MemorySize;
+        wResource->ResourceType = FResourcesType::TextureCubeArray;
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] += wResource->MemorySize;
+      }
+      else if(pDesc->ViewDimension == D3D12_SRV_DIMENSION::D3D12_SRV_DIMENSION_TEXTURE1DARRAY)
+      {
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] -= wResource->MemorySize;
+        wResource->ResourceType = FResourcesType::Texture1DArray;
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] += wResource->MemorySize;
+      }
+      else if(pDesc->ViewDimension == D3D12_SRV_DIMENSION::D3D12_SRV_DIMENSION_TEXTURE2DARRAY)
+      {
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] -= wResource->MemorySize;
+        wResource->ResourceType = FResourcesType::Texture2DArray;
+        RenderDoc::Inst().ResourceMemorySizeMap[(int)wResource->ResourceType][0] += wResource->MemorySize;
+      }
+    }
+  }
+  // --Dudechen 
   // assume descriptors are volatile
   if(capframe)
   {

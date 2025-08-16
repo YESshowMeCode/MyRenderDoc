@@ -28,6 +28,7 @@
 #include <QMutex>
 #include "Code/Interface/QRDInterface.h"
 #include "Code/QRDUtils.h"
+#include "Fbx/FBXManager.h"
 
 namespace Ui
 {
@@ -51,6 +52,7 @@ class FlycamWrapper;
 struct BufferData;
 struct PopulateBufferData;
 struct CalcBoundingBoxData;
+struct CSVGeometry;
 
 struct BufferExport
 {
@@ -118,6 +120,14 @@ public:
 
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
+
+  // ++Dudechen
+  void ExportData(const QString &InFilePath, const BufferExport &params, const MeshDataStage& InType);
+  void GenGeometry(CSVGeometry& OutputData, uint64_t ShaderId, QMap<int, QString> meshSetting, int exportType, FbxMatrix inverseMat);
+  QStringList GetVSInMeshHeadData();
+  QStringList GetVSOutMeshHeadData();
+  QStringList GetDSMeshHeadData();
+  // --Dudechen
 
 private slots:
   // automatic slots

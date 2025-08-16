@@ -165,6 +165,11 @@ public:
   rdcarray<TextureDescription> GetTextures();
   TextureDescription GetTexture(ResourceId id);
 
+  // ++Dudechen
+  void ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize) override;
+  void ResetReplacedTexture(ResourceId texid) override;
+  // --Dudechen
+
   rdcarray<DebugMessage> GetDebugMessages();
 
   rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);

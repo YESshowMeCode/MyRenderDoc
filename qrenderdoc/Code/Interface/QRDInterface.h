@@ -2080,7 +2080,7 @@ more information for how this differs.
 :return: The currently selected action.
 :rtype: renderdoc.ActionDescription
 )");
-  virtual const ActionDescription *CurSelectedAction() = 0;
+  virtual ActionDescription *CurSelectedAction() = 0;
 
   DOCUMENT(R"(Retrieve the current action.
 
@@ -2108,7 +2108,7 @@ more information for how this differs.
 :return: The root actions.
 :rtype: List[renderdoc.ActionDescription]
 )");
-  virtual const rdcarray<ActionDescription> &CurRootActions() = 0;
+  virtual rdcarray<ActionDescription> &CurRootActions() = 0;
 
   DOCUMENT(R"(Retrieve the information about a particular resource.
 
@@ -2664,6 +2664,33 @@ through the execution of a given shader.
 :return: The new :class:`ShaderViewer` window opened, but not shown.
 :rtype: ShaderViewer
 )");
+
+  //++[Dudechen]
+  DOCUMENT(R"(Show a new :class:`ShaderViewer` window, decompiling and showing an editable view of a given shader.
+
+:param renderdoc.ResourceId id: The shader object, if applicable, that's being edited. If this edit
+  corresponds to no shader object (such as if it's a custom shader) this can be a null ID.
+:param renderdoc.ShaderStage stage: The shader stage for this shader.
+:param str entryPoint: The entry point to be used when compiling the edited shader.
+:param List[Tuple[str,str]] files: The source files, with each tuple being a pair of the filename
+  and the file contents.
+:param renderdoc.ShaderEncoding shaderEncoding: The encoding of the input files.
+:param renderdoc.ShaderCompileFlags flags: The flags originally used to compile the shader.
+:param ShaderViewer.SaveCallback saveCallback: The callback function to call when a save/update is
+  triggered.
+:param ShaderViewer.CloseCallback closeCallback: The callback function to call when the shader
+  viewer is closed.
+:return: The new :class:`ShaderViewer` window opened but not shown for editing.
+:rtype: ShaderViewer
+)");
+  virtual IShaderViewer *DecompileShader(ResourceId id, ShaderStage stage, const rdcstr &entryPoint,
+                                    const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                                    ShaderCompileFlags flags,
+                                    const ShaderReflection *shader,
+                                    IShaderViewer::SaveCallback saveCallback,
+                                    IShaderViewer::RevertCallback closeCallback) = 0;
+  //--[Dudechen]
+  
   virtual IShaderViewer *DebugShader(const ShaderReflection *shader, ResourceId pipeline,
                                      ShaderDebugTrace *trace, const rdcstr &debugContext) = 0;
 

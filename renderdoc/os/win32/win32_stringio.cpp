@@ -24,6 +24,7 @@
  ******************************************************************************/
 
 #include <io.h>
+#include <Psapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <stdio.h>
@@ -1000,4 +1001,14 @@ uint64_t GetMachineIdent()
 
   return ret;
 }
+
+// ++Dudechen
+int64_t GetCPUMemorySize()
+{
+  PROCESS_MEMORY_COUNTERS pmc;
+  GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+  return pmc.WorkingSetSize;
+};
+// --Dudechen
+
 };

@@ -28,6 +28,10 @@
 #include "Code/QRDUtils.h"
 #include "QRDInterface.h"
 
+//++[Dudechen] Modified
+#include "Code/Interface/ShaderProcessingTool.h"
+//--[Dudechen]
+
 static const QString glsl_stage4[arraydim<ShaderStage>()] = {
     lit("vert"), lit("tesc"), lit("tese"), lit("geom"),
     lit("frag"), lit("comp"), lit("task"), lit("mesh"),
@@ -63,8 +67,11 @@ QString vulkanVerForSpirVer(QString spirvVer)
     return lit("vulkan1.3");
 }
 
-static ShaderToolOutput RunTool(const ShaderProcessingTool &tool, QWidget *window,
+ShaderToolOutput RunTool(const ShaderProcessingTool &tool, QWidget *window,
                                 QString input_file, QString output_file, QStringList &argList)
+//--[Dudechen]
+// static ShaderToolOutput RunTool(const ShaderProcessingTool &tool, QWidget *window,
+//                                 QString input_file, QString output_file, QStringList &argList)
 {
   bool writesToFile = true;
   bool readStdin = false;

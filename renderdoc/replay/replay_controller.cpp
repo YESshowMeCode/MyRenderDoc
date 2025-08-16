@@ -215,7 +215,7 @@ ActionDescription *ReplayController::GetActionByEID(uint32_t eventId)
   return m_Actions[eventId];
 }
 
-const rdcarray<ActionDescription> &ReplayController::GetRootActions()
+rdcarray<ActionDescription> &ReplayController::GetRootActions()
 {
   CHECK_REPLAY_THREAD();
 
@@ -2159,6 +2159,16 @@ void ReplayController::ReplaceResource(ResourceId from, ResourceId to)
   for(size_t i = 0; i < m_Outputs.size(); i++)
     if(m_Outputs[i]->GetType() != ReplayOutputType::Headless)
       m_Outputs[i]->Display();
+}
+
+void ReplayController::ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize)
+{
+  m_pDevice->ReplaceTextureData(texid, data, dataSize);
+}
+
+void ReplayController::ResetReplacedTexture(ResourceId texid)
+{
+  m_pDevice->ResetReplacedTexture(texid);
 }
 
 void ReplayController::RemoveReplacement(ResourceId id)

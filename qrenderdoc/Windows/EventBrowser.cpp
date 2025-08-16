@@ -168,6 +168,9 @@ enum
 {
   COL_NAME,
   COL_EID,
+  // ++Dudechen
+  COL_TRIANGLE,
+  // --Dudechen
   COL_ACTION,
   COL_DURATION,
   COL_COUNT,
@@ -297,6 +300,69 @@ struct EventItemModel : public QAbstractItemModel
     }
 
     m_RenameCacheID = m_Ctx.ResourceNameCacheID();
+  }
+
+  QModelIndex GetHeadIndex(QModelIndex index)
+  {
+    return createIndex(index.row(), 0, index.internalId());
+  }
+
+
+  void SortListByTriangleNum()
+  {
+    emit beginResetModel();
+    emit endResetModel();
+
+    m_Nodes.clear();
+    m_RowInParentCache.clear();
+    m_MessageCounts.clear();
+    m_EIDNameCache.clear();
+    m_Actions.clear();
+    m_Chunks.clear();
+    m_Times.clear();
+
+    if(!m_Ctx.CurRootActions().empty())
+      m_Nodes[0] = CreateActionNodeByTriangleNum(NULL);
+
+    m_CurrentEID = createIndex(0, 0, TagCaptureStart);
+
+    m_Bookmarks.clear();
+    m_BookmarkIndices.clear();
+
+    m_FindResults.clear();
+    m_FindString.clear();
+    m_FindEIDSearch = false;
+    
+    RefreshCache();
+    m_View->viewport()->update();
+  }
+  
+
+  void SortListByDuration()
+  {
+    emit beginResetModel();
+    emit endResetModel();
+
+    m_Nodes.clear();
+    m_RowInParentCache.clear();
+    m_MessageCounts.clear();
+    m_EIDNameCache.clear();
+    m_Actions.clear();
+    m_Chunks.clear();
+
+    if(!m_Ctx.CurRootActions().empty() && m_SortTimes.count() > 0)
+      m_Nodes[0] = CreateActionNodeByDuration(NULL);
+
+    m_CurrentEID = createIndex(0, 0, TagCaptureStart);
+
+    m_Bookmarks.clear();
+    m_BookmarkIndices.clear();
+
+    m_FindResults.clear();
+    m_FindString.clear();
+    m_FindEIDSearch = false;
+    
+    RefreshCache();
   }
 
   bool HasTimes() { return !m_Times.empty(); }
@@ -719,6 +785,9 @@ struct EventItemModel : public QAbstractItemModel
         case COL_NAME: return tr("Name");
         case COL_EID: return lit("EID");
         case COL_ACTION: return lit("Action #");
+        // ++Dudechen
+        case COL_TRIANGLE: return lit("Triangle");
+        // --Dudechen
         case COL_DURATION: return tr("Duration (%1)").arg(UnitSuffix(m_TimeUnit));
         default: break;
       }
@@ -822,6 +891,10 @@ struct EventItemModel : public QAbstractItemModel
         switch(index.column())
         {
           case COL_NAME: return GetCachedEIDName(eid);
+            //++Dudechen
+          case COL_TRIANGLE:
+            return QVariant(GetTriangle(eid));
+            // --Dudechen
           case COL_EID:
           case COL_ACTION:
             if(action->eventId == eid && !action->children.empty())
@@ -899,6 +972,97 @@ struct EventItemModel : public QAbstractItemModel
     return QVariant();
   }
 
+  // ++Dudechen
+  int GetTriangle(uint32_t eid) const 
+  {
+    if(!m_Actions[eid])
+    {
+      return 0;
+    }
+    int OutTriangle = 0;
+    const ActionDescription *action = m_Actions[eid];
+    OutTriangle += 
+        (action->numIndices * (action->numInstances == 0 ? 1 : action->numInstances)) / 3;
+    for(const ActionDescription& ac : action->children)
+    {
+      if(!ac.IsFakeMarker())
+      {
+        OutTriangle += GetTriangle(ac.eventId);
+      }
+    }
+    return OutTriangle;
+  }
+
+  int GetTriangle(const ActionDescription* action)
+  {
+    int OutTriangle = 0;
+    OutTriangle += 
+        (action->numIndices * (action->numInstances == 0 ? 1 : action->numInstances)) / 3;
+    for(const ActionDescription& ac : action->children)
+    {
+      if(!ac.IsFakeMarker())
+      {
+        OutTriangle += GetTriangle(&ac);
+      }
+    }
+    return OutTriangle;
+  }
+
+  double GetDuration(const ActionDescription* action)
+  {
+    const rdcarray<ActionDescription> &actionChildren = 
+        action ? action->children : m_Ctx.CurRootActions();
+
+    double duration = m_SortTimes[action->eventId];
+    
+    for(const ActionDescription &a : actionChildren)
+    {
+      // ignore out of bounds EIDs - should not happen
+      if(a.eventId >= m_SortTimes.size())
+        continue;
+
+      if(qIsNaN(m_SortTimes[a.eventId]) || qIsInf(m_SortTimes[a.eventId]))
+        continue;
+
+      // add the time for this event, if it's non-negative. Because we fill out nodes in reverse
+      // order, any children that are nodes themselves should be populated by now
+      duration += qMax(0.0, m_SortTimes[a.eventId]);
+    }
+
+    return duration;
+  }
+
+  double GetDuration(uint32_t eid)
+  {
+
+    if(!m_Actions[eid])
+    {
+      return 0;
+    }
+    const ActionDescription *action = m_Actions[eid];
+    const rdcarray<ActionDescription> &actionChildren = 
+        action ? action->children : m_Ctx.CurRootActions();
+
+    double duration = m_SortTimes[action->eventId];
+
+    for(const ActionDescription &a : actionChildren)
+    {
+      // ignore out of bounds EIDs - should not happen
+      if(a.eventId >= m_SortTimes.size())
+        continue;
+
+      if(qIsNaN(m_SortTimes[a.eventId]) || qIsInf(m_SortTimes[a.eventId]))
+        continue;
+
+      // add the time for this event, if it's non-negative. Because we fill out nodes in reverse
+      // order, any children that are nodes themselves should be populated by now
+      duration += qMax(0.0, m_SortTimes[a.eventId]);
+    }
+
+    return duration;
+  }
+  // --Dudechen
+
 private:
   ICaptureContext &m_Ctx;
 
@@ -908,6 +1072,7 @@ private:
   static const quintptr TagCaptureStart = quintptr(0);
 
   rdcarray<double> m_Times;
+  rdcarray<double> m_SortTimes;
   TimeUnit m_TimeUnit = TimeUnit::Count;
 
   QModelIndex m_CurrentEID;
@@ -955,6 +1120,9 @@ private:
     // The key is the row, the value is the index in the list of children of the action
     QMap<int, size_t> row2action;
     static const int Row2ActionFactor = 100;
+
+    QMap<int, uint32_t> RowActionMap;
+
   };
   QMap<uint32_t, ActionTreeNode> m_Nodes;
 
@@ -1091,6 +1259,251 @@ private:
 
     return ret;
   }
+  // ++Dudechen
+  ActionTreeNode CreateActionNodeByTriangleNum(ActionDescription *action, bool sort = false)
+  {
+    // if(action == nullptr)
+    // {
+    //   action = m_Ctx.CurSelectedAction();
+    // }
+    rdcarray<ActionDescription> &actionRange =
+        action ? action->children : m_Ctx.CurRootActions();
+    
+    // account for the Capture Start row we'll add at the top level
+    int row = action ? 0 : 1;
+
+    ActionTreeNode ret;
+
+    ret.action = action;
+
+    ret.effectiveEID = actionRange.back().eventId;
+    if(actionRange.back().flags & ActionFlags::PopMarker)
+      ret.effectiveEID--;
+    
+    ret.row2action[0] = 0;
+
+    uint32_t row2eidStride = (actionRange.count() / ActionTreeNode::Row2ActionFactor) + 1;
+
+    const SDFile &sdfile = m_Ctx.GetStructuredFile();
+
+    rdcarray<ActionDescription> actionArr = actionRange;
+
+    bool childrenShouldSort = false;
+    if(action == m_Ctx.CurSelectedAction() || sort)
+    {
+      SortArrayByTrianglesNum(actionArr);
+      childrenShouldSort = true;
+    }
+
+    QMap<int, uint32_t> row2ActionMap;
+    int rowNum = 0;
+    
+    for(int i = 0; i < actionArr.count(); i++)
+    {
+      ActionDescription &a = actionArr[i];
+      SetRow2EventMap(a, row2ActionMap, rowNum);
+    }
+
+    ret.RowActionMap = row2ActionMap;
+    
+    for(int i = 0; i < actionRange.count(); i++)
+    {
+      ActionDescription &a = actionRange[i];
+
+      if((i % row2eidStride) == 0)
+        ret.row2action[row] = i;
+
+      for(const APIEvent &e : a.events)
+      {
+        m_Actions.resize_for_index(e.eventId);
+        m_Chunks.resize_for_index(e.eventId);
+        m_Actions[e.eventId] = &a;
+        if(e.chunkIndex != APIEvent::NoChunk && e.chunkIndex < sdfile.chunks.size())
+          m_Chunks[e.eventId] = sdfile.chunks[e.chunkIndex];
+      }
+
+      row += a.events.count();
+
+      if(a.children.empty())
+        continue;
+
+      ActionTreeNode node = CreateActionNodeByTriangleNum(&a, childrenShouldSort);
+
+      node.index = createIndex(row - 1, 0, a.eventId);
+
+      if(a.eventId == ret.effectiveEID)
+        ret.effectiveEID = node.effectiveEID;
+
+      m_Nodes[a.eventId] = node;
+    }
+    ret.rowCount = row;
+    return ret;
+  }
+
+  void SortArrayByTrianglesNum(rdcarray<ActionDescription>& actionArr)
+  {
+    int size = (int)actionArr.size();
+    QMap<ActionDescription, int> ActionsTriangleNum;
+    for(int i = 0; i < size; i++)
+    {
+      ActionsTriangleNum.insert(actionArr[i], GetTriangle(&actionArr[i]));
+    }
+    
+    for(int i = size - 1; i > 0; i--)
+    {
+      for(int j = 0; j < i; j++)
+      {
+        if(ActionsTriangleNum[actionArr[j]] < ActionsTriangleNum[actionArr[j+1]])
+        {
+          actionArr.swap(j,j+1);
+        }
+      }
+    }
+  }
+
+  void SetRow2EventMap(ActionDescription& action, QMap<int, uint32_t>&  row2Events, int& startRow)
+  {
+    rdcarray<APIEvent> events = action.events;
+    int size = (int)events.size();
+    for(int i = 0; i < size; i++)
+    {
+      for(int j = 0; j < size - 1; j++)
+      {
+        if(GetTriangle(events[j].eventId) < GetTriangle(events[j+1].eventId))
+        {
+          events.swap(j,j+1);
+        }
+      }
+    }
+    for(int i = 0; i < size; i++)
+    {
+      startRow++;
+      row2Events.insert(startRow, events[i].eventId);
+    }
+  }
+
+    ActionTreeNode CreateActionNodeByDuration(ActionDescription *action, bool sort = false)
+  {
+    // if(action == nullptr)
+    // {
+    //   action = m_Ctx.CurSelectedAction();
+    // }
+    rdcarray<ActionDescription> &actionRange =
+      action ? action->children : m_Ctx.CurRootActions();
+    
+    // account for the Capture Start row we'll add at the top level
+    int row = action ? 0 : 1;
+
+    ActionTreeNode ret;
+
+    ret.action = action;
+
+    ret.effectiveEID = actionRange.back().eventId;
+    if(actionRange.back().flags & ActionFlags::PopMarker)
+      ret.effectiveEID--;
+    
+    ret.row2action[0] = 0;
+
+    uint32_t row2eidStride = (actionRange.count() / ActionTreeNode::Row2ActionFactor) + 1;
+
+    const SDFile &sdfile = m_Ctx.GetStructuredFile();
+
+    rdcarray<ActionDescription> actionArr = actionRange;
+    bool childrenShouldSort = false;
+    if(action == m_Ctx.CurSelectedAction() || sort)
+    {
+      childrenShouldSort = true;
+      SortArrayByDuration(actionArr);
+    }
+
+    QMap<int, uint32_t> row2ActionMap;
+    int rowNum = 0;
+    
+    for(int i = 0; i < actionArr.count(); i++)
+    {
+      ActionDescription &a = actionArr[i];
+      SetRow2EventMapByDuration(a, row2ActionMap, rowNum);
+    }
+
+    ret.RowActionMap = row2ActionMap;
+    
+    for(int i = 0; i < actionRange.count(); i++)
+    {
+      ActionDescription &a = actionRange[i];
+
+      if((i % row2eidStride) == 0)
+        ret.row2action[row] = i;
+
+      for(const APIEvent &e : a.events)
+      {
+        m_Actions.resize_for_index(e.eventId);
+        m_Chunks.resize_for_index(e.eventId);
+        m_Actions[e.eventId] = &a;
+        if(e.chunkIndex != APIEvent::NoChunk && e.chunkIndex < sdfile.chunks.size())
+          m_Chunks[e.eventId] = sdfile.chunks[e.chunkIndex];
+      }
+
+      row += a.events.count();
+
+      if(a.children.empty())
+        continue;
+
+      ActionTreeNode node = CreateActionNodeByDuration(&a, childrenShouldSort);
+
+      node.index = createIndex(row - 1, 0, a.eventId);
+
+      if(a.eventId == ret.effectiveEID)
+        ret.effectiveEID = node.effectiveEID;
+
+      m_Nodes[a.eventId] = node;
+    }
+    ret.rowCount = row;
+    return ret;
+  }
+
+
+  void SortArrayByDuration(rdcarray<ActionDescription>& actionArr)
+  {
+    int size = (int)actionArr.size();
+    QMap<ActionDescription, double> actionsDurtion;
+    for(int i = 0; i < size; i++)
+    {
+      actionsDurtion.insert(actionArr[i], GetDuration(&actionArr[i]));
+    }
+    for(int i = size - 1; i >0; i--)
+    {
+      for(int j = 0; j < i; j++)
+      {
+        if(actionsDurtion[actionArr[j]] < actionsDurtion[actionArr[j+1]])
+        {
+          actionArr.swap(j,j+1);
+        }
+      }
+    }
+  }
+
+  void SetRow2EventMapByDuration(ActionDescription& action, QMap<int, uint32_t>&  row2Events, int& startRow)
+  {
+    rdcarray<APIEvent> events = action.events;
+    int size = (int)events.size();
+    for(int i = 0; i < size; i++)
+    {
+      for(int j = 0; j < size - 1; j++)
+      {
+        if(GetDuration(events[j].eventId) < GetDuration(events[j+1].eventId))
+        {
+          events.swap(j,j+1);
+        }
+      }
+    }
+    for(int i = 0; i < size; i++)
+    {
+      startRow++;
+      row2Events.insert(startRow, events[i].eventId);
+    }
+  }
+
+  // --Dudechen
 
   QModelIndex GetIndexForActionChildRow(const ActionTreeNode &node, int row, int column) const
   {
@@ -3445,9 +3858,12 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   ui->events->header()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
   // we set up the name column as column 0 so that it gets the tree controls.
-  ui->events->header()->setSectionResizeMode(COL_NAME, QHeaderView::Interactive);
-  ui->events->header()->setSectionResizeMode(COL_EID, QHeaderView::Interactive);
   ui->events->header()->setSectionResizeMode(COL_ACTION, QHeaderView::Interactive);
+  ui->events->header()->setSectionResizeMode(COL_EID, QHeaderView::Interactive);
+  ui->events->header()->setSectionResizeMode(COL_NAME, QHeaderView::Interactive);
+  // ++Dudechen
+  ui->events->header()->setSectionResizeMode(COL_TRIANGLE, QHeaderView::Interactive);
+  // --Dudechen
   ui->events->header()->setSectionResizeMode(COL_DURATION, QHeaderView::Interactive);
 
   ui->events->header()->setMinimumSectionSize(40);
@@ -3462,15 +3878,19 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   ui->events->setColoredTreeLineWidth(3.0f);
 
   // set up default section layout. This will be overridden in restoreState()
-  ui->events->header()->resizeSection(COL_EID, 80);
-  ui->events->header()->resizeSection(COL_ACTION, 60);
-  ui->events->header()->resizeSection(COL_NAME, 200);
-  ui->events->header()->resizeSection(COL_DURATION, 80);
+  ui->events->header()->resizeSection(COL_EID, 40);
+  ui->events->header()->resizeSection(COL_ACTION, 30);
+  ui->events->header()->resizeSection(COL_NAME, 100);
+  ui->events->header()->resizeSection(COL_TRIANGLE, 30);
+  ui->events->header()->resizeSection(COL_DURATION, 40);
 
-  ui->events->header()->hideSection(COL_ACTION);
-  ui->events->header()->hideSection(COL_DURATION);
+  ui->events->header()->showSection(COL_ACTION);
+  ui->events->header()->showSection(COL_EID);
+  ui->events->header()->showSection(COL_DURATION);
+  ui->events->header()->showSection(COL_TRIANGLE);
 
-  ui->events->header()->moveSection(COL_NAME, 2);
+  // ui->events->header()->moveSection(COL_NAME, 2);
+  // --Dudechen
 
   UpdateDurationColumn();
 
@@ -3638,7 +4058,7 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
 
   m_redPalette = palette();
   m_redPalette.setColor(QPalette::Base, Qt::red);
-
+  
   m_Ctx.AddCaptureViewer(this);
 }
 
@@ -5090,6 +5510,131 @@ void EventBrowser::on_colSelect_clicked()
   UpdateVisibleColumns(tr("Select Event Browser Columns"), COL_COUNT, ui->events->header(), headers);
 }
 
+// ++Dudechen
+void EventBrowser::on_SortTriangle_clicked(QModelIndex selectedIndex) 
+{
+  m_Model->SortListByTriangleNum();
+  QModelIndex index = m_Model->GetIndexForEID(m_Ctx.CurSelectedEvent());
+  QModelIndex found = m_FilterModel->mapFromSource(index);
+  if(found.isValid())
+  {
+    ui->events->scrollTo(found);
+    ExpandNode(found);
+  }
+  else
+  {
+    index = m_Model->GetHeadIndex(selectedIndex);
+    ui->events->scrollTo(index);
+    ExpandNode(index);
+  }
+  on_timeActions_clicked();
+}
+
+void EventBrowser::on_SortDuration_clicked(QModelIndex selectedIndex)
+{
+  // ui->events->setIgnoreBackgroundColors(!m_Ctx.Config().EventBrowser_ColorEventRow);
+  m_Model->SortListByDuration();
+  QModelIndex index = m_Model->GetIndexForEID(m_Ctx.CurSelectedEvent());
+  QModelIndex found = m_FilterModel->mapFromSource(index);
+  if(found.isValid())
+  {
+    ExpandNode(found);
+    ui->events->scrollTo(found);
+  }
+  else
+  {
+    index = m_Model->GetHeadIndex(selectedIndex);
+    ExpandNode(index);
+    ui->events->scrollTo(index);
+  }
+  on_timeActions_clicked();
+
+}
+
+void EventBrowser::on_UnSort_clicked(QModelIndex selectedIndex)
+{
+  m_Model->ResetModel();
+  QModelIndex found = m_FilterModel->mapFromSource(m_Model->GetIndexForEID(m_Ctx.CurSelectedEvent()));
+  if(found.isValid())
+  {
+    ExpandNode(found);
+  }
+  on_timeActions_clicked();
+}
+
+void EventBrowser::on_ExportEvents_Clicked()
+{
+  if(!m_Ctx.IsCaptureLoaded())
+    return;
+  on_timeActions_clicked();
+  ActionDescription* SelectedAction = m_Ctx.CurSelectedAction();
+
+  QString SaveDir = QFileDialog::getExistingDirectory(this, tr("选择保存位置"));
+  if(SaveDir.isEmpty())
+  {
+    return;
+  }
+  rdcstr actionName = SelectedAction->GetName(m_Ctx.GetStructuredFile());
+  QDir Dir(SaveDir + tr("\\") + QString(tr(actionName.c_str())));
+  QString Path = Dir.path();
+  // if(!Dir.exists())
+  // {
+  //   Dir.mkpath(Path);
+  // }
+  Path += tr("_OutPutEventsInfo.csv");
+
+  QFile *f = new QFile(Path);
+  QIODevice::OpenMode flags = QIODevice::WriteOnly | QFile::Truncate | QIODevice::Text;
+  if(!f->open(flags))
+  {
+    delete f;
+    RDDialog::critical(this, tr("Error exporting file"),
+                       tr("Couldn't open file '%1' for writing").arg(Path));
+    return;
+  }
+  QTextStream s(f);
+  s << "EventId" << "," << "EventName" << "," << "TriangleNum" << "," << "Duration(us)" << "\n";
+
+  for(ActionDescription action : SelectedAction->children)
+  {
+    recordActionInfo(action, s);
+  }
+
+  f->close();
+  delete f;
+}
+
+void EventBrowser::recordActionInfo(const ActionDescription &action, QTextStream& stream)
+{
+  rdcstr name = GetEventName(action.eventId);
+  name.removeOne(',');
+  name.removeOne(',');
+  double duration = m_Model->GetDuration(&action) * 1000000;
+  if(duration < 0) duration = 0;
+  stream << action.eventId << "," << name.c_str() << ","
+          << std::to_string(m_Model->GetTriangle(&action)).c_str() << "," << std::to_string(duration).c_str() << "\n";
+  
+  for(ActionDescription subAction : action.children)
+  {
+    recordActionInfo(subAction, stream);
+  }
+}
+
+uint32_t EventBrowser::StatTriangleNum(uint32_t StartId, uint32_t EndId)
+{
+  uint32_t Sum = 0;
+  for(int i = StartId; i <= EndId; i++)
+  {
+    if(m_Ctx.GetAction(i))
+    {
+      Sum += m_Model->GetTriangle(i);
+    }
+  }
+  return Sum;
+}
+
+// --Dudechen
+
 QString EventBrowser::GetExportString(int indent, bool firstchild, const QModelIndex &idx)
 {
   QString prefix = QString(indent * 2 - (firstchild ? 1 : 0), QLatin1Char(' '));
@@ -5257,6 +5802,39 @@ void EventBrowser::events_contextMenu(const QPoint &pos)
   QAction toggleBookmark(tr("Toggle &Bookmark"), this);
   QAction selectCols(tr("&Select Columns..."), this);
   QAction rgpSelect(tr("Select &RGP Event"), this);
+  QAction exportEvents(tr("ExportEvents"), this);
+
+  // ++Dudechen
+  int column = ui->events->columnAt(pos.x());
+  QAction Sort_Action(tr("Sort(Triangle)"), this);
+  QAction UnSort_Action(tr("UnSort(Triangle)"), this);
+  if(index.column() == COL_TRIANGLE)
+  {
+    Sort_Action.setText(tr("Sort(Triangle)"));
+    contextMenu.addAction(&Sort_Action);
+    QObject::connect(&Sort_Action, &QAction::triggered, [this, index]() { on_SortTriangle_clicked(index); });
+
+    UnSort_Action.setText(tr("ResetSort"));
+    contextMenu.addAction(&UnSort_Action);
+    QObject::connect(&UnSort_Action, &QAction::triggered, [this, index]() { on_UnSort_clicked(index); });
+  }
+  else if(index.column() == COL_DURATION)
+  {
+    Sort_Action.setText(tr("Sort(Duration)"));
+    contextMenu.addAction(&Sort_Action);
+    QObject::connect(&Sort_Action, &QAction::triggered, [this, index]() { on_SortDuration_clicked(index); });
+    
+    UnSort_Action.setText(tr("ResetSort"));
+    contextMenu.addAction(&UnSort_Action);
+    QObject::connect(&UnSort_Action, &QAction::triggered, [this, index]() { on_UnSort_clicked(index); });
+  }
+
+  exportEvents.setText(tr("ExportEvents"));
+  contextMenu.addAction(&exportEvents);
+  QObject::connect(&exportEvents, &QAction::triggered, this, &EventBrowser::on_ExportEvents_Clicked);
+
+  // --Dudechen
+  
   rgpSelect.setIcon(Icons::connect());
 
   contextMenu.addAction(&expandAll);

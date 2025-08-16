@@ -874,6 +874,16 @@ private:
   static std::map<ID3D12Device *, WrappedID3D12Device *> m_DeviceWrappers;
 
 public:
+
+  // ++Dudechen
+  std::set<ResourceId> disabledResources;
+  std::map<ResourceId, std::vector<uint8_t>> replacement_data;
+  std::map<ResourceId, WrappedID3D12Resource *> replacement_map;
+  bool ReplaceOrUnwrap(WrappedID3D12Resource *in_srv, const D3D12_SHADER_RESOURCE_VIEW_DESC *pDesc,
+                                                   D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor);
+  void resetRemappings();
+  // --Dudechen
+  
   ALLOCATE_WITH_WRAPPED_POOL(WrappedID3D12Device);
 
   WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitParams params, bool enabledDebugLayer);

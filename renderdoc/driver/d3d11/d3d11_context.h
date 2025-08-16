@@ -355,6 +355,14 @@ public:
   void IntAddRef();
   void IntRelease();
 
+  // ++Dudechen
+  std::set<ResourceId> disabledResources;
+  std::map<ResourceId, std::vector<uint8_t>> replacement_data;
+  std::map<ResourceId, ID3D11ShaderResourceView *> replacement_map;
+  ID3D11ShaderResourceView *ReplaceOrUnwrap(ID3D11ShaderResourceView *in_srv);
+  void resetRemappings();
+  // --Dudechen
+
   //////////////////////////////
   // implement IUnknown
   ULONG STDMETHODCALLTYPE AddRef();

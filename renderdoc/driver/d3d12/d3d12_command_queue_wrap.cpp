@@ -811,6 +811,14 @@ void WrappedID3D12CommandQueue::ExecuteCommandLists(UINT NumCommandLists,
 {
   if(m_pDevice->HasFatalError())
     return;
+
+  // ++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().RenderPassCount += NumCommandLists;
+  }
+  // --Dudechen
+  
   ExecuteCommandListsInternal(NumCommandLists, ppCommandLists, false, false);
 }
 

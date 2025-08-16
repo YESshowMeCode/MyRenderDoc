@@ -2785,8 +2785,16 @@ bool WrappedID3D11DeviceContext::Serialise_PSSetShaderResources(
                                           StartSlot, NumViews);
 
     ID3D11ShaderResourceView *SRVs[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT];
+    
+    // ++Dudechen
+    // for(UINT i = 0; i < NumViews; i++)
+    //   SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
+
     for(UINT i = 0; i < NumViews; i++)
-      SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
+    {
+      SRVs[i] = ReplaceOrUnwrap(ppShaderResourceViews[i]);
+    }
+    // --Dudechen
 
     m_pRealContext->PSSetShaderResources(StartSlot, NumViews, SRVs);
     VerifyState();
@@ -2813,7 +2821,10 @@ void WrappedID3D11DeviceContext::PSSetShaderResources(
       MarkResourceReferenced(GetViewResourceResID(ppShaderResourceViews[i]), eFrameRef_Read);
     }
 
-    SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
+    // ++Dudechen
+    // SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
+    SRVs[i] = ReplaceOrUnwrap(ppShaderResourceViews[i]);
+    // --Dudechen
   }
 
   SERIALISE_TIME_CALL(m_pRealContext->PSSetShaderResources(StartSlot, NumViews, SRVs));
@@ -3882,6 +3893,14 @@ void WrappedID3D11DeviceContext::DrawIndexedInstanced(UINT IndexCountPerInstance
 {
   SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
 
+  //++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().CurrrentDrawCallCount++;
+    RenderDoc::Inst().CurrentTriangleCount += IndexCountPerInstance * InstanceCount;
+  }
+  // --Dudechen
+
   DrainAnnotationQueue();
 
   MarkAPIActive();
@@ -3923,6 +3942,14 @@ bool WrappedID3D11DeviceContext::Serialise_DrawInstanced(SerialiserType &ser,
   Serialise_DebugMessages(GET_SERIALISER);
 
   SERIALISE_CHECK_READ_ERRORS();
+
+  //++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().CurrrentDrawCallCount++;
+    RenderDoc::Inst().CurrentTriangleCount += VertexCountPerInstance * InstanceCount;
+  }
+  //--Dudechen
 
   if(IsReplayingAndReading())
   {
@@ -4759,7 +4786,13 @@ bool WrappedID3D11DeviceContext::Serialise_CSSetShaderResources(
     ID3D11ShaderResourceView *SRVs[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT];
     for(UINT i = 0; i < NumViews; i++)
       SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
+    // ++Dudechen
+    // for(UINT i = 0; i < NumViews; i++)
+    //   SRVs[i] = UNWRAP(WrappedID3D11ShaderResourceView1, ppShaderResourceViews[i]);
 
+    for(UINT i = 0; i < NumViews; i++)
+      SRVs[i] = ReplaceOrUnwrap(ppShaderResourceViews[i]);
+    // --Dudechen
     m_pRealContext->CSSetShaderResources(StartSlot, NumViews, SRVs);
     VerifyState();
   }

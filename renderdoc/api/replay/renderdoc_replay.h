@@ -722,6 +722,12 @@ See :meth:`BuildTargetShader`, :meth:`RemoveReplacement`.
 )");
   virtual void ReplaceResource(ResourceId original, ResourceId replacement) = 0;
 
+  // ++Dudechen
+  virtual void ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize) = 0;
+
+  virtual void ResetReplacedTexture(ResourceId texid) = 0;
+  // --Dudechen
+
   DOCUMENT(R"(Clear any cached data from previous replays and ensure subsequent replays fully
 re-initialise any data, including e.g. bindless feedback, printf results or mesh output data.
 )");
@@ -779,7 +785,7 @@ regions.
 :return: The list of root-level actions in the capture.
 :rtype: List[ActionDescription]
 )");
-  virtual const rdcarray<ActionDescription> &GetRootActions() = 0;
+  virtual rdcarray<ActionDescription> &GetRootActions() = 0;
 
   DOCUMENT(R"(Retrieve the values of a specified set of counters.
 

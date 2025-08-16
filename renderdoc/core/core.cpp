@@ -307,6 +307,28 @@ RenderDoc &RenderDoc::Inst()
   return realInst;
 }
 
+// ++Dudechen
+int64_t RenderDoc::GetCPUMemorySize()
+{
+  return OSUtility::GetCPUMemorySize();
+}
+
+bool RenderDoc::IsShowDebugMessage()
+{
+  return bDebugMessage;
+}
+
+void RenderDoc::ShowDebugMessage()
+{
+  bDebugMessage = true;
+}
+
+void RenderDoc::HideDebugMessage()
+{
+  bDebugMessage = false;
+}
+// --Dudechen
+
 void RenderDoc::RecreateCrashHandler()
 {
   SCOPED_WRITELOCK(m_ExHandlerLock);
@@ -389,6 +411,31 @@ void RenderDoc::UnregisterMemoryRegion(void *mem)
     m_ExHandler->UnregisterMemoryRegion(mem);
 }
 
+rdcstr RenderDoc::HumanBytes(int64_t Byte)
+{
+  static double KB = 1024.0;
+  static double MB = KB * 1024.0;
+  static double GB = MB * 1024.0;
+  static double TB = GB * 1024.0;
+  if((KB <= Byte) && (Byte < MB))
+  {
+    return StringFormat::Fmt("%.2fKB", Byte / KB);
+  }
+  else if((MB <= Byte) && (Byte < GB))
+  {
+    return StringFormat::Fmt("%.2fMB", Byte / MB);
+  }
+  else if((GB <= Byte) && (Byte < TB))
+  {
+    return StringFormat::Fmt("%.2fGB", Byte / GB);
+  }
+  else if(TB <= Byte)
+  {
+    return StringFormat::Fmt("%,2fTB", Byte / TB);
+  }
+  return "";
+}
+
 RenderDoc::RenderDoc()
 {
   m_CaptureFileTemplate = "";
@@ -419,6 +466,37 @@ RenderDoc::RenderDoc()
 
   m_TargetControlThreadShutdown = false;
   m_ControlClientThreadShutdown = false;
+
+  // ++Dudechen
+  ResourceTypeNames = {
+    "None",           "Texture1D",      "Texture1DArray",   "Texture2D",
+    "TextureRect",    "Texture2DArray", "Texture2DMS",      "Texture2DMSArray",
+    "Texture3D",      "TextureCube",    "TextureCubeArray", "RenterTarget1D",
+                     "RenterTarget2D",
+                     "RenterTarget3D",
+                     "VertexBuffer",
+                     "IndexBuffer",
+                     "Buffer"
+  };
+  ResourceMemorySizeMap[(int)FResourcesType::None] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture1D] = {0, 0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture1DArray] = {0, 0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture2D] = {0, 0};
+  ResourceMemorySizeMap[(int)FResourcesType::TextureRect] = {0, 0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture2DArray] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture2DMS] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture2DMSArray] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::Texture3D] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::TextureCube] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::TextureCubeArray] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::RenterTarget1D] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::RenterTarget2D] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::RenterTarget3D] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::VertexBuffer] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::IndexBuffer] = {0,0};
+  ResourceMemorySizeMap[(int)FResourcesType::Buffer] = {0,0};
+  // --Dudechen
+  
 }
 
 void RenderDoc::Initialise()
@@ -1345,7 +1423,56 @@ rdcstr RenderDoc::GetOverlayText(RDCDriver driver, DeviceOwnedWindow devWnd, uin
         overlayText += " Unknown window.";
     }
   }
+  // ++Dudechen
+  MaxDrawCallCount = std::max(CurrrentDrawCallCount, MaxDrawCallCount);
+  MaxTriangleCount = std::max(CurrentTriangleCount, MaxTriangleCount);
+  MaxIndexBufferSize = std::max(CurrentIndexBufferSize, MaxIndexBufferSize);
+  MaxVertexBufferSize = std::max(CurrentVertexBufferSize, MaxVertexBufferSize);
+  overlayText += StringFormat::Fmt("RenderPassCount:%d\n", RenderPassCount);
+  overlayText += StringFormat::Fmt("DrawCallCount:Cur=%d, Max=%d\n", CurrrentDrawCallCount,
+                                   MaxDrawCallCount);
+  overlayText +=
+      StringFormat::Fmt("TriangleCount:Cur=%.2fW, Max=%.2fW\n",
+                        (CurrentTriangleCount / 3) / 10000.0, (MaxTriangleCount / 3) / 10000.0);
 
+  overlayText +=
+      StringFormat::Fmt("VertexBuffer:Cur=%s, Max=%s\n",
+                                   HumanBytes(CurrentVertexBufferSize),
+                                   HumanBytes(MaxVertexBufferSize));
+  overlayText +=
+      StringFormat::Fmt("IndexBuffer:Cur=%s, Max=%s\n", HumanBytes(CurrentIndexBufferSize),
+                        HumanBytes(MaxIndexBufferSize));
+  
+  overlayText += StringFormat::Fmt("CPUMemory:%s\n",
+                                   HumanBytes(RenderDoc::Inst().GetCPUMemorySize()));
+  std::map<int, std::vector<int64_t>>::iterator it;
+  std::vector < std::pair<int, std::vector<int64_t>>>::iterator itA;
+  std::vector < std::pair<int, std::vector<int64_t>>> TempArray;
+  for(it = ResourceMemorySizeMap.begin(); it != ResourceMemorySizeMap.end(); ++it)
+  {
+    if(it->second[0] == 0)
+    {
+      continue;
+    }
+    it->second[1] = std::max(it->second[0], it->second[1]);
+    TempArray.push_back(std::make_pair(it->first, it->second));
+  }
+  sort(TempArray.begin(), TempArray.end(),
+       [](const std::pair<int, std::vector<int64_t>> &num1,
+          const std::pair<int, std::vector<int64_t>> &num2) -> int {
+         return num1.second[0] > num2.second[0];
+       });
+  for(itA = TempArray.begin(); itA != TempArray.end(); ++itA)
+  {
+    overlayText += StringFormat::Fmt("%s:Cur=%s,Max=%s\n", ResourceTypeNames[itA->first],
+                                     HumanBytes(itA->second[0]), HumanBytes(itA->second[1]));
+  }
+  CurrrentDrawCallCount = 0;
+  CurrentTriangleCount = 0;
+  CurrentVertexBufferSize= 0;
+  CurrentIndexBufferSize= 0;
+  RenderPassCount = 0;
+  // --Dudechen
   return overlayText;
 }
 

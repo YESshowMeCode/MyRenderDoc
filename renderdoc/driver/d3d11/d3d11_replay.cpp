@@ -674,6 +674,44 @@ TextureDescription D3D11Replay::GetTexture(ResourceId id)
   return tex;
 }
 
+void D3D11Replay::ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize)
+{
+  if (m_pImmediateContext->disabledResources.find(texid) == m_pImmediateContext->disabledResources.end())
+  {
+    m_pImmediateContext->disabledResources.insert(texid);
+    std::vector<uint8_t> textureData;
+    for(int i = 0; i < dataSize; i++)
+    {
+      textureData.push_back(data[i]);
+    }
+    m_pImmediateContext->replacement_data.insert({texid, textureData});
+  }
+  else
+  {
+    m_pImmediateContext->replacement_data.erase(texid);
+    m_pImmediateContext->replacement_map[texid]->Release();
+    m_pImmediateContext->replacement_map.erase(texid);
+
+    std::vector<uint8_t> textureData;
+    for(int i = 0; i < dataSize; i++)
+    {
+      textureData.push_back(data[i]);
+    }
+    m_pImmediateContext->replacement_data.insert({texid, textureData});
+  }
+}
+
+void D3D11Replay::ResetReplacedTexture(ResourceId texid)
+{
+  if (m_pImmediateContext->disabledResources.find(texid) != m_pImmediateContext->disabledResources.end())
+  {
+    m_pImmediateContext->disabledResources.erase(texid);
+    m_pImmediateContext->replacement_data.erase(texid);
+    m_pImmediateContext->replacement_map[texid]->Release();
+    m_pImmediateContext->replacement_map.erase(texid);
+  }
+}
+
 rdcarray<BufferDescription> D3D11Replay::GetBuffers()
 {
   rdcarray<BufferDescription> ret;

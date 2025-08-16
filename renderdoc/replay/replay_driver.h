@@ -147,6 +147,10 @@ public:
 
   virtual rdcarray<TextureDescription> GetTextures() = 0;
   virtual TextureDescription GetTexture(ResourceId id) = 0;
+  // ++Dudechen
+  virtual void ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize){};
+  virtual void ResetReplacedTexture(ResourceId texid){};
+  // --Dudechen
 
   virtual rdcarray<DebugMessage> GetDebugMessages() = 0;
 

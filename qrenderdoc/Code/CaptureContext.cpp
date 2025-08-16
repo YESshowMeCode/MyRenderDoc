@@ -2519,9 +2519,68 @@ IShaderViewer *CaptureContext::EditShader(ResourceId id, ShaderStage stage, cons
   return viewer;
 }
 
+//++[Dudechen]
+IShaderViewer *CaptureContext::DecompileShader(ResourceId id, ShaderStage stage,
+                                          const rdcstr &entryPoint, const rdcstrpairs &files,
+                                          ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
+                                          const ShaderReflection *shader,
+                                          IShaderViewer::SaveCallback saveCallback,
+                                          IShaderViewer::RevertCallback closeCallback)
+{
+  ShaderViewer *viewer = NULL;
+
+  if(id != ResourceId())
+  {
+    auto replaceSaveCallback = [this, saveCallback](
+                                   ICaptureContext *ctx, IShaderViewer *viewer, ResourceId id,
+                                   ShaderStage stage, ShaderEncoding shaderEncoding,
+                                   ShaderCompileFlags flags, rdcstr entryFunc, bytebuf shaderBytes) {
+      ApplyShaderEdit(viewer, id, stage, shaderEncoding, flags, entryFunc, shaderBytes, false);
+
+      if(saveCallback)
+        saveCallback(ctx, viewer, id, stage, shaderEncoding, flags, entryFunc, shaderBytes);
+    };
+
+    auto replaceCloseCallback = [this, closeCallback](ICaptureContext *ctx, IShaderViewer *view,
+                                                      ResourceId id) {
+      RevertShaderEdit(view, id);
+
+      if(closeCallback)
+        closeCallback(ctx, view, id);
+    };
+
+    viewer = ShaderViewer::DecompileShader(
+        *this, id, stage, entryPoint, files, shaderEncoding, flags, shader, replaceSaveCallback,
+        replaceCloseCallback,
+        [this](ShaderViewer *view, bool closed) {
+          SetModification(CaptureModifications::EditedShaders);
+          if(closed)
+            m_ShaderEditors.removeOne(view);
+        },
+        m_MainWindow->Widget());
+
+    m_ShaderEditors.push_back(viewer);
+    SetModification(CaptureModifications::EditedShaders);
+  }
+  else
+  {
+    viewer =
+        ShaderViewer::DecompileShader(*this, id, stage, entryPoint, files, shaderEncoding, flags, shader,
+                                      saveCallback, closeCallback, NULL, m_MainWindow->Widget());
+  }
+
+  return viewer;
+}
+//--[Dudechen]
+
+// void CaptureContext::ApplyShaderEdit(IShaderViewer *viewer, ResourceId id, ShaderStage stage,
+//                                      ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
+//                                      const rdcstr &entryFunc, const bytebuf &shaderBytes)
+
 void CaptureContext::ApplyShaderEdit(IShaderViewer *viewer, ResourceId id, ShaderStage stage,
                                      ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
-                                     const rdcstr &entryFunc, const bytebuf &shaderBytes)
+                                     const rdcstr &entryFunc, const bytebuf &shaderBytes,
+                                     bool showErrorEvenEmpty)
 {
   if(shaderBytes.isEmpty())
     return;

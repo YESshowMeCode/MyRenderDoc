@@ -488,6 +488,7 @@ enum
   Output_StdErr
 };
 void WriteOutput(int channel, const char *str);
+int64_t GetCPUMemorySize();
 
 enum MachineIdentBits
 {

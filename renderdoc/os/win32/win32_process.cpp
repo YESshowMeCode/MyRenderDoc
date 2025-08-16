@@ -1304,9 +1304,13 @@ RDResult BackupAndChangeRegistry(GlobalHookData &hookdata, const rdcstr &shimpat
   ret = RegSetValueExA(keyNative, "LoadAppInit_DLLs", 0, REG_DWORD, (const BYTE *)&one, sizeof(one));
   REG_CHECK("Could not set LoadAppInit_DLLs");
 
-  rdcwstr shortpath(shimpathNative.size());
-  GetShortPathNameW(StringFormat::UTF82Wide(shimpathNative).c_str(), shortpath.data(),
-                    (DWORD)shortpath.length());
+  // ++Dudechen 
+  rdcwstr shortpath(StringFormat::UTF82Wide(shimpathNative).c_str());
+  // --Dudechen 
+
+  // rdcwstr shortpath(shimpathNative.size());
+  // GetShortPathNameW(StringFormat::UTF82Wide(shimpathNative).c_str(), shortpath.data(),
+  //                   (DWORD)shortpath.length());
 
   ret = RegSetValueExW(keyNative, L"AppInit_DLLs", 0, REG_SZ, (const BYTE *)shortpath.data(),
                        DWORD(shortpath.length() * sizeof(wchar_t)));
@@ -1333,9 +1337,14 @@ RDResult BackupAndChangeRegistry(GlobalHookData &hookdata, const rdcstr &shimpat
     ret = RegSetValueExA(keyWow32, "LoadAppInit_DLLs", 0, REG_DWORD, (const BYTE *)&one, sizeof(one));
     REG_CHECK("Could not set LoadAppInit_DLLs");
 
-    shortpath = rdcwstr(shimpathWow32.size());
-    GetShortPathNameW(StringFormat::UTF82Wide(shimpathWow32).c_str(), shortpath.data(),
-                      (DWORD)shortpath.length());
+    // ++Dudechen
+    
+    // shortpath = rdcwstr(shimpathWow32.size());
+    // GetShortPathNameW(StringFormat::UTF82Wide(shimpathWow32).c_str(), shortpath.data(),
+    //                   (DWORD)shortpath.length());
+
+    shortpath = rdcwstr(StringFormat::UTF82Wide(shimpathWow32).c_str());
+    // --Dudechen
 
     ret = RegSetValueExW(keyWow32, L"AppInit_DLLs", 0, REG_SZ, (const BYTE *)shortpath.data(),
                          DWORD(shortpath.length() * sizeof(wchar_t)));

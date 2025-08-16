@@ -3274,6 +3274,14 @@ void WrappedID3D12GraphicsCommandList::DrawInstanced(UINT VertexCountPerInstance
                                                      UINT InstanceCount, UINT StartVertexLocation,
                                                      UINT StartInstanceLocation)
 {
+
+  //++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().CurrrentDrawCallCount++;
+    RenderDoc::Inst().CurrentTriangleCount += VertexCountPerInstance * InstanceCount;
+  }
+  //--Dudechen 
   SERIALISE_TIME_CALL(m_pList->DrawInstanced(VertexCountPerInstance, InstanceCount,
                                              StartVertexLocation, StartInstanceLocation));
 
@@ -3355,6 +3363,13 @@ void WrappedID3D12GraphicsCommandList::DrawIndexedInstanced(UINT IndexCountPerIn
                                                             INT BaseVertexLocation,
                                                             UINT StartInstanceLocation)
 {
+  //++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().CurrrentDrawCallCount++;
+    RenderDoc::Inst().CurrentTriangleCount += IndexCountPerInstance * InstanceCount;
+  }
+  //--Dudechen
   SERIALISE_TIME_CALL(m_pList->DrawIndexedInstanced(IndexCountPerInstance, InstanceCount,
                                                     StartIndexLocation, BaseVertexLocation,
                                                     StartInstanceLocation));

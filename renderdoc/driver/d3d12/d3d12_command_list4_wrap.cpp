@@ -449,6 +449,14 @@ void WrappedID3D12GraphicsCommandList::BeginRenderPass(
     UINT NumRenderTargets, const D3D12_RENDER_PASS_RENDER_TARGET_DESC *pRenderTargets,
     const D3D12_RENDER_PASS_DEPTH_STENCIL_DESC *pDepthStencil, D3D12_RENDER_PASS_FLAGS Flags)
 {
+
+  // ++Dudechen
+  if(RenderDoc::Inst().IsShowDebugMessage())
+  {
+    RenderDoc::Inst().RenderPassCount++;
+  }
+  // --Dudechen
+  
   D3D12_RENDER_PASS_RENDER_TARGET_DESC *unwrappedRTs =
       m_pDevice->GetTempArray<D3D12_RENDER_PASS_RENDER_TARGET_DESC>(NumRenderTargets);
 

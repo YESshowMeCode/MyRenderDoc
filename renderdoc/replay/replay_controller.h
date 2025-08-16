@@ -176,13 +176,19 @@ public:
                                                 const ShaderCompileFlags &compileFlags,
                                                 ShaderStage type);
   void ReplaceResource(ResourceId from, ResourceId to);
+
+  // ++Dudechen
+  void ReplaceTextureData(ResourceId texid, byte *data, size_t dataSize) override;
+  void ResetReplacedTexture(ResourceId texid) override;
+  // --Dudechen
+  
   void RemoveReplacement(ResourceId id);
   void FreeTargetResource(ResourceId id);
   void ClearReplayCache();
 
   FrameDescription GetFrameInfo();
   const SDFile &GetStructuredFile();
-  const rdcarray<ActionDescription> &GetRootActions();
+  rdcarray<ActionDescription> &GetRootActions();
   void AddFakeMarkers();
   rdcarray<CounterResult> FetchCounters(const rdcarray<GPUCounter> &counters);
   rdcarray<GPUCounter> EnumerateCounters();

@@ -32,6 +32,7 @@
 #include <QTimer>
 #include <QUrl>
 #include "Code/Interface/QRDInterface.h"
+#include "Fbx/FBXManager.h"
 #include "toolwindowmanager/ToolWindowManager.h"
 
 namespace Ui
@@ -220,6 +221,26 @@ private:
 
   void MakeNetworkRequest(QUrl url, std::function<void(QByteArray)> success,
                           std::function<void(QString)> failure = {});
+
+  // ++Dudechen
+public:
+  void OpenExportMeshSettingDialog();
+  void OpenGlobalHookWindow();
+  void OpenStatTrianglesDialog();
+  void ExportAllCSV();
+  void ExportAllMesh(const ExportMeshData& exportMeshData);
+  void ExportTexture(ResourceId resId, const QString& path);
+  // void ExportAllMeshAndTexture();
+  // void SaveStageResourcePreviews(ShaderStage stage, const rdcarray<ShaderResource>& resourceDetails, const rdcarray<Bindpoint>& mapping, rdcarray<BoundResourceArray>& ResList, int& PrevIndex, bool Copy, bool rw, const QString& SavePath);
+  void AddXYCustomTool();
+  QList<ActionDescription> GetActions();
+  void GetActions(rdcarray<ActionDescription> &InActions, QList<ActionDescription> &OutActions);
+  uint32_t StatTrianlgesNum(uint32_t StartId, uint32_t EndId);
+  uint32_t StatTrianglesInfoByMaterialId(uint32_t MaterialId, QList<uint32_t> &OutEvents);
+
+  void StatGameTrianglesData(uint32_t& AllTrianglesNum, uint32_t& ColorPassTrianglesNum, uint32_t& DepthPassTrianglesNum, uint32_t& TransparentTrianglesNum, uint32_t& DrawCallsNum, QList<uint32_t> &OutEvents);
+  uint32_t GetTriangle(const ActionDescription* action);
+  // --Dudechen
 
   enum class UpdateResult
   {

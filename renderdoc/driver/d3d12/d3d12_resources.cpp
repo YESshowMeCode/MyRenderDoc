@@ -188,6 +188,20 @@ WrappedID3D12Resource::~WrappedID3D12Resource()
 {
   SAFE_RELEASE(m_Heap);
 
+  // ++Dudechen
+  RenderDoc::Inst().ResourceMemorySizeMap[(int)ResourceType][0] -= MemorySize;
+  //if(m_pDevice->IndexBufferSizeMap.find(GetResourceID()) != m_pDevice->IndexBufferSizeMap.end())
+  //{
+  //  m_pDevice->IndexBufferSize -= MemorySize;
+  //  m_pDevice->IndexBufferSizeMap.erase(GetResourceID());
+  //}
+  //else if(m_pDevice->VertexBufferSizeMap.find(GetResourceID()) != m_pDevice->VertexBufferSizeMap.end())
+  //{
+  //  m_pDevice->VertexBufferSize -= MemorySize;
+  //  m_pDevice->VertexBufferSizeMap.erase(GetResourceID());
+  //}
+  // --Dudechen 
+  
   // perform an implicit unmap on release
   if(GetResourceRecord())
   {

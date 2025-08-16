@@ -37,6 +37,7 @@
 #include <QStyledItemDelegate>
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
+#include "Dialogs/stb_image.h"
 #include "Dialogs/TextureSaveDialog.h"
 #include "Widgets/Extended/RDHeaderView.h"
 #include "Widgets/ResourcePreview.h"
@@ -2353,6 +2354,11 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, bool input,
 {
   QMenu contextMenu(this);
 
+  // ++Dudechen
+  QAction replaceDefaultTexture(tr("ReplaceDefaultTexture"), this);
+  QAction replaceTexture(tr("ReplaceTexture"), this);
+  QAction resetTexture(tr("Reset"), this);
+
   QAction openLockedTab(tr("Open new Locked Tab"), this);
   QAction openResourceInspector(tr("Open in Resource Inspector"), this);
   QAction usageTitle(tr("Used:"), this);
@@ -2361,6 +2367,16 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, bool input,
   openLockedTab.setIcon(Icons::action_hover());
   openResourceInspector.setIcon(Icons::link());
 
+  contextMenu.addAction(&replaceDefaultTexture);
+  contextMenu.addAction(&replaceTexture);
+  contextMenu.addAction(&resetTexture);
+  contextMenu.addSeparator();
+
+  QObject::connect(&replaceDefaultTexture, &QAction::triggered, [this, id]() { ReplaceDefaultTexture_triggered(id); });
+  QObject::connect(&replaceTexture, &QAction::triggered, [this, id]() { ReplaceTexture_triggered(id); });
+  QObject::connect(&resetTexture, &QAction::triggered, [this, id]() { ResetTexture_triggered(id); });
+
+  // --Dudechen
   if(m_Ctx.CurPipelineState().SupportsBarriers())
   {
     imageLayout.setText(tr("Image is in layout ") + m_Ctx.CurPipelineState().GetResourceLayout(id));
@@ -3414,6 +3430,91 @@ void TextureViewer::setPersistData(const QVariant &persistData)
 
   SetupTextureTabs();
 }
+
+// Dudechen
+void TextureViewer::ReplaceDefaultTexture_triggered(ResourceId resId)
+{
+  TextureDescription *texptr = m_Ctx.GetTexture(resId);
+  ResourceId texid = texptr->resourceId;
+  size_t datasize = 0;
+  byte* pixels = nullptr;
+  m_Ctx.Replay().AsyncInvoke(
+     [texid, datasize, pixels, this](IReplayController *r) {
+        r->ReplaceTextureData(texid, pixels, datasize);
+     });
+  
+  if(m_Ctx.IsCaptureLoaded())
+    m_Ctx.RefreshStatus();
+  delete pixels;
+}
+
+void TextureViewer::ReplaceTexture_triggered(ResourceId resId)
+{
+  QString filter;
+
+  // put the selected filetype first
+  FileType curType = FileType::PNG;
+  QString ext = ToQStr(curType);
+  filter = tr("%1 Files").arg(ext) + lit(" (*.%1)").arg(ext.toLower());
+
+  for(FileType i : values<FileType>())
+  {
+    // skip the one we bumped to the front
+    if(i == curType)
+      continue;
+
+    ext = ToQStr(i);
+
+    filter += lit(";;") + tr("%1 Files").arg(ext) + lit(" (*.%1)").arg(ext.toLower());
+  }
+
+  QString selectedFilter;
+
+  QString filename =
+      RDDialog::getOpenFileName(this, tr("Replace Texture By"), QString(), filter, &selectedFilter);
+
+  std::string str = filename.toStdString();
+
+  TextureDescription *texptr = m_Ctx.GetTexture(resId);
+  ResourceId texid = texptr->resourceId;
+  size_t datasize = texptr->byteSize;
+  
+  // int texWidth, texHeight, texChannels;
+  // byte* pixels = (byte *)stbi_load(filename.toStdString().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  //
+  // if(texptr->width != texWidth || texptr->height != texHeight)
+  // {
+  //   QMessageBox::warning(this, tr("warning"), tr("ReplaceTexture Size Error"));
+  //   return;
+  // }
+  // datasize = texWidth * texHeight * 4;
+  // if(pixels)
+  // {
+  //   m_Ctx.Replay().AsyncInvoke(
+  //      [texid, datasize, pixels, this](IReplayController *r) {
+  //         r->ReplaceTextureData(texid, pixels, datasize);
+  //      });
+  // }
+  // if(m_Ctx.IsCaptureLoaded())
+  //   m_Ctx.RefreshStatus();
+  //
+  // pixels = nullptr;
+  // delete pixels;
+}
+
+
+void TextureViewer::ResetTexture_triggered(ResourceId resId)
+{
+  if(m_Ctx.IsCaptureLoaded())
+  {
+    TextureDescription *texptr = m_Ctx.GetTexture(resId);
+    ResourceId texid = texptr->resourceId;
+    m_Ctx.Replay().BlockInvoke([texid](IReplayController *r) { r->ResetReplacedTexture(texid); });
+    m_Ctx.RefreshStatus();
+  }
+}
+// --Dudechen
+
 
 float TextureViewer::GetFitScale()
 {

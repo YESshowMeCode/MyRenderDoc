@@ -486,14 +486,14 @@ struct CaptureContextInvoker : ObjectForwarder<ICaptureContext>
   }
   virtual uint32_t CurSelectedEvent() override { return m_Obj.CurSelectedEvent(); }
   virtual uint32_t CurEvent() override { return m_Obj.CurEvent(); }
-  virtual const ActionDescription *CurSelectedAction() override
+  virtual ActionDescription *CurSelectedAction() override
   {
     return m_Obj.CurSelectedAction();
   }
   virtual const ActionDescription *CurAction() override { return m_Obj.CurAction(); }
   virtual const ActionDescription *GetFirstAction() override { return m_Obj.GetFirstAction(); }
   virtual const ActionDescription *GetLastAction() override { return m_Obj.GetLastAction(); }
-  virtual const rdcarray<ActionDescription> &CurRootActions() override
+  virtual rdcarray<ActionDescription> &CurRootActions() override
   {
     return m_Obj.CurRootActions();
   }
@@ -818,6 +818,21 @@ struct CaptureContextInvoker : ObjectForwarder<ICaptureContext>
                                               files, knownTool, shaderEncoding, flags, saveCallback,
                                               revertCallback);
   }
+
+  //++[Dudechen]
+  virtual IShaderViewer *DecompileShader(ResourceId id, ShaderStage stage, const rdcstr &entryPoint,
+                                    const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                                    ShaderCompileFlags flags,
+                                    const ShaderReflection *shader, 
+                                    IShaderViewer::SaveCallback saveCallback,
+                                    IShaderViewer::RevertCallback closeCallback) override
+  {
+    return InvokeRetFunction<IShaderViewer *>(&ICaptureContext::DecompileShader, id, stage,
+                                              entryPoint, files, shaderEncoding, flags,
+                                              shader, 
+                                              saveCallback, closeCallback);
+  }
+  //--[Dudechen]
 
   virtual IShaderViewer *DebugShader(const ShaderReflection *shader, ResourceId pipeline,
                                      ShaderDebugTrace *trace, const rdcstr &debugContext) override

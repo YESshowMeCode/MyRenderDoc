@@ -27,6 +27,8 @@
 
 #include <stdint.h>    // for standard types
 #include <string.h>    // for memcpy, etc
+
+#include <algorithm>
 #include <functional>
 #include <initializer_list>
 #include <type_traits>
@@ -713,6 +715,14 @@ public:
     elems = NULL;
     allocatedCount = usedCount = 0;
     assign(in);
+  }
+
+  void swap(size_t left, size_t right)
+  {
+    if(left >= right || left >= size() || right >= size())
+      return;
+    
+    std::iter_swap(elems + left, elems + right);
   }
 
   inline void swap(rdcarray<T> &other)

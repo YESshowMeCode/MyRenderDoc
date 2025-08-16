@@ -27,7 +27,9 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <vector>
 #include <map>
+
 #include "api/app/renderdoc_app.h"
 #include "api/replay/apidefs.h"
 #include "api/replay/capture_options.h"
@@ -96,6 +98,29 @@ struct DeviceOwnedWindow
     return *this == o;
   }
 };
+
+// ++Dudechen
+enum class FResourcesType : uint32_t
+{
+  None,
+  Texture1D,
+  Texture1DArray,
+  Texture2D,
+  TextureRect,
+  Texture2DArray,
+  Texture2DMS,
+  Texture2DMSArray,
+  Texture3D,
+  TextureCube,
+  TextureCubeArray,
+  RenterTarget1D,
+  RenterTarget2D,
+  RenterTarget3D,
+  VertexBuffer,
+  IndexBuffer,
+  Buffer,
+};
+//--Dudechen
 
 struct IFrameCapturer
 {
@@ -440,6 +465,15 @@ public:
     cb(progress);
   }
 
+  // ++Dudechen
+  int64_t GetCPUMemorySize();
+
+  bool IsShowDebugMessage();
+  void ShowDebugMessage();
+  void HideDebugMessage();
+  bool bDebugMessage = false;
+  // --Dudechen
+
   // set from outside of the device creation interface
   void SetCaptureFileTemplate(const rdcstr &logFile);
   const char *GetCaptureFileTemplate() const { return m_CaptureFileTemplate.c_str(); }
@@ -614,6 +648,28 @@ public:
   void CycleActiveWindow();
   uint32_t GetCapturableWindowCount();
 
+  // ++Dudechen
+  int32_t RenderPassCount = 0;
+  int64_t CurrrentDrawCallCount = 0;
+  int64_t MaxDrawCallCount = -MAXINT;
+  int64_t CurrentTriangleCount = 0;
+  int64_t MaxTriangleCount = -MAXINT;
+  int64_t TextureMemory2DSize = 0;
+  int64_t RenderTargetMemory2D = 0;
+  rdcarray<rdcstr> ResourceTypeNames;
+  std::map<int, std::vector<int64_t>> ResourceMemorySizeMap;
+  int64_t CurrentIndexBufferSize = 0;
+  int64_t CurrentVertexBufferSize = 0;
+  int64_t MaxIndexBufferSize = -MAXINT;
+  int64_t MaxVertexBufferSize = -MAXINT;
+
+  rdcstr HumanBytes(int64_t Byte);
+
+  //std::map<ResourceId, std::vector<int64_t>> IndexBufferSizeMap;
+  //std::map<ResourceId, int64_t> VertexBufferSizeMap;
+  // --Dudechen
+
+  
 private:
   RenderDoc();
   ~RenderDoc();

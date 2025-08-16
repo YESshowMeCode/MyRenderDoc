@@ -159,14 +159,14 @@ public:
   rdcarray<ShaderEncoding> TargetShaderEncodings() override { return m_TargetEncodings; }
   uint32_t CurSelectedEvent() override { return m_SelectedEventID; }
   uint32_t CurEvent() override { return m_EventID; }
-  const ActionDescription *CurSelectedAction() override { return GetAction(CurSelectedEvent()); }
+  ActionDescription *CurSelectedAction() override { return GetAction(CurSelectedEvent()); }
   const ActionDescription *CurAction() override { return GetAction(CurEvent()); }
   const ActionDescription *GetFirstAction() override { return m_FirstAction; };
   const ActionDescription *GetLastAction() override { return m_LastAction; };
   void ClearReplayCache() override;
   bool OpenRGPProfile(const rdcstr &filename) override;
   IRGPInterop *GetRGPInterop() override { return m_RGP; }
-  const rdcarray<ActionDescription> &CurRootActions() override { return *m_Actions; }
+  rdcarray<ActionDescription> &CurRootActions() override { return *m_Actions; }
   const ResourceDescription *GetResource(ResourceId id) const override { return m_Resources[id]; }
   const rdcarray<ResourceDescription> &GetResources() override { return m_ResourceList; }
   rdcstr GetResourceName(ResourceId id) const override;
@@ -183,7 +183,7 @@ public:
     return m_DescriptorStores[id];
   }
   const rdcarray<BufferDescription> &GetBuffers() const override { return m_BufferList; }
-  const ActionDescription *GetAction(uint32_t eventId) override
+  ActionDescription *GetAction(uint32_t eventId) override
   {
     return GetAction(*m_Actions, eventId);
   }
@@ -255,9 +255,19 @@ public:
                             IShaderViewer::SaveCallback saveCallback,
                             IShaderViewer::RevertCallback revertCallback) override;
 
+  //++[Dudechen]
+  IShaderViewer *DecompileShader(ResourceId id, ShaderStage stage, const rdcstr &entryPoint,
+                            const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                            ShaderCompileFlags flags, const ShaderReflection *shader, IShaderViewer::SaveCallback saveCallback,
+                            IShaderViewer::RevertCallback closeCallback) override;
+
   void ApplyShaderEdit(IShaderViewer *viewer, ResourceId id, ShaderStage stage,
-                       ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
-                       const rdcstr &entryFunc, const bytebuf &shaderBytes);
+                     ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
+                     const rdcstr &entryFunc, const bytebuf &shaderBytes,
+                     bool showErrorEvenEmpty = true);
+  //--[Dudechen]
+
+
   void RevertShaderEdit(IShaderViewer *viewer, ResourceId id);
 
   IShaderViewer *DebugShader(const ShaderReflection *shader, ResourceId pipeline,
@@ -347,13 +357,13 @@ private:
   uint32_t m_SelectedEventID = 0;
   uint32_t m_EventID = 0;
 
-  const ActionDescription *GetAction(const rdcarray<ActionDescription> &actions, uint32_t eventId)
+  ActionDescription *GetAction(rdcarray<ActionDescription> &actions, uint32_t eventId)
   {
-    for(const ActionDescription &a : actions)
+    for(ActionDescription &a : actions)
     {
       if(!a.children.empty())
       {
-        const ActionDescription *action = GetAction(a.children, eventId);
+        ActionDescription *action = GetAction(a.children, eventId);
         if(action != NULL)
           return action;
       }
@@ -366,7 +376,7 @@ private:
   }
 
   void setupDockWindow(QWidget *shad, bool hide);
-  const rdcarray<ActionDescription> *m_Actions;
+  rdcarray<ActionDescription> *m_Actions;
   rdcarray<ActionDescription> m_EmptyActions;
 
   rdcarray<ShaderEncoding> m_CustomEncodings, m_TargetEncodings;
